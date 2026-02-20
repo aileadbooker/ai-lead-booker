@@ -1,15 +1,5 @@
-# Intermediate files (generated/regenerated)
-.tmp/
-
-# Secrets and credentials
+node_modules/
+database.sqlite*
 .env
-credentials.json
-token.json
-
-# Standard Python ignores
-__pycache__/
-*.py[cod]
-*$py.class
-venv/
-.venv/
-.env/
+dist/
+file:database.sqlite*
