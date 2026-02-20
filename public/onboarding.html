@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome Aboard - AI Lead Booker</title>
+    <link rel="stylesheet" href="/css/onboarding.css">
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+    <div class="glass-orb orb-1"></div>
+    <div class="glass-orb orb-2"></div>
+
+    <div class="container">
+        <h1>Welcome to the Family! 🎉</h1>
+        <p>Your account is active. Watch this quick 2-minute video to set up your first campaign correctly.</p>
+
+        <div class="video-placeholder">
+            <i class="fas fa-play-circle"></i>
+        </div>
+
+        <div class="step">
+            <h3><span>1</span> Connect Your Identity</h3>
+            <p>Go to <strong>Settings > Email Connection</strong>. Enter your Google App Password to enable real-time
+                replies.</p>
+        </div>
+
+        <div class="step">
+            <h3><span>2</span> Define Your Niche</h3>
+            <p>Be specific (e.g., "Real Estate Agents in Dallas") for best results.</p>
+        </div>
+
+        <div class="step">
+            <h3><span>3</span> Launch & Relax</h3>
+            <p>The AI will handle the rest. Check your calendar for bookings.</p>
+        </div>
+
+        <button id="finish-btn" class="btn-primary">
+            Go to Dashboard <i class="fas fa-arrow-right"></i>
+        </button>
+    </div>
+
+    <script>
+        document.getElementById('finish-btn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/onboarding/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    window.location.href = '/dashboard';
+                } else {
+                    alert('Error completing onboarding.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+    </script>
+</body>
+
+</html>

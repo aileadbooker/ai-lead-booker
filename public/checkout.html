@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete Your Setup - AI Lead Booker</title>
+    <link rel="stylesheet" href="/css/onboarding.css">
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <script src="https://js.stripe.com/v3/"></script> <!-- Placeholder for future -->
+</head>
+
+<body>
+    <div class="glass-orb orb-1"></div>
+    <div class="glass-orb orb-2"></div>
+
+    <div class="container wide-container">
+        <h1>Select Your Plan 🚀</h1>
+        <p>Choose the best plan to automate your sales pipeline.</p>
+
+        <div class="pricing-grid">
+            <!-- Tier 1 -->
+            <div class="price-card">
+                <h3>Starter</h3>
+                <div class="price">$999<span>/mo</span></div>
+                <span class="roi-label">For Small Service Businesses</span>
+                <ul>
+                    <li>✅ Up to 300 Leads/mo</li>
+                    <li>✅ Email + Form Intake</li>
+                    <li>✅ AI Qualification</li>
+                    <li>✅ Booking Automation</li>
+                </ul>
+                <button class="btn-outline pay-btn" data-plan="starter">Select Starter</button>
+            </div>
+
+            <!-- Tier 2 -->
+            <div class="price-card popular">
+                <div class="ribbon">Most Popular</div>
+                <h3>Growth</h3>
+                <div class="price">$1,999<span>/mo</span></div>
+                <span class="roi-label">For Scaling Companies</span>
+                <ul>
+                    <li>✅ Up to 1,000 Leads/mo</li>
+                    <li>✅ Advanced Qualification Rules</li>
+                    <li>✅ Custom Follow-up Sequences</li>
+                    <li>✅ Priority Support</li>
+                </ul>
+                <button class="btn-outline full-width pay-btn" data-plan="growth">Select Growth</button>
+            </div>
+
+            <!-- Tier 3 -->
+            <div class="price-card">
+                <h3>Scale</h3>
+                <div class="price">$3,500+<span>/mo</span></div>
+                <span class="roi-label">For High-Volume Agencies</span>
+                <ul>
+                    <li>✅ 3,000+ Leads/mo</li>
+                    <li>✅ Dedicated Tuning</li>
+                    <li>✅ Custom Integrations</li>
+                    <li>✅ Whitelabel Options</li>
+                </ul>
+                <button class="btn-outline pay-btn" data-plan="scale">Contact Sales</button>
+            </div>
+        </div>
+
+        <div class="persuasion-section">
+            <h2>Why Leading Agencies Choose Us</h2>
+            <div class="benefit-grid">
+                <div class="benefit-card">
+                    <i class="fas fa-clock"></i>
+                    <h4>Save 20+ Hours/Week</h4>
+                    <p>Stop manual prospecting. Our AI handles the heavy lifting so you can focus on closing deals.</p>
+                </div>
+                <div class="benefit-card">
+                    <i class="fas fa-robot"></i>
+                    <h4>Human-Like Outreach</h4>
+                    <p>Our AI writes personalized emails that get responses, indistinguishable from a top-tier SDR.</p>
+                </div>
+                <div class="benefit-card">
+                    <i class="fas fa-chart-line"></i>
+                    <h4>Instant Scalability</h4>
+                    <p>Go from 10 to 1,000 leads per month without hiring more staff or managing complex tools.</p>
+                </div>
+                <div class="benefit-card">
+                    <i class="fas fa-bolt"></i>
+                    <h4>Setup in Minutes</h4>
+                    <p>No coding required. Connect your account, define your niche, and watch the bookings roll in.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="guarantee">
+            <i class="fas fa-shield-alt"></i> 14-Day Money-Back Guarantee
+        </div>
+    </div>
+
+    <script>
+        // Check authentication on load
+        fetch('/api/me').then(res => {
+            if (res.status === 401) window.location.href = '/login.html';
+        }).catch(() => { });
+
+        document.querySelectorAll('.pay-btn').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const btn = e.target;
+                const plan = btn.dataset.plan;
+
+                if (plan === 'scale') {
+                    alert('Please contact sales@aileadbooker.com for Scale plan.');
+                    return;
+                }
+
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+                btn.disabled = true;
+
+                try {
+                    // Real Stripe Checkout Call
+                    const response = await fetch('/api/create-checkout-session', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ plan })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.url) {
+                        window.location.href = data.url;
+                    } else {
+                        if (response.status === 401) {
+                            alert('Session expired. Please log in again.');
+                            window.location.href = '/login.html'; // Or '/'
+                            return;
+                        }
+                        alert('Payment failed. ' + (data.error || ''));
+                        btn.innerHTML = 'Select ' + plan.charAt(0).toUpperCase() + plan.slice(1);
+                        btn.disabled = false;
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('An error occurred.');
+                    btn.innerHTML = 'Select ' + plan.charAt(0).toUpperCase() + plan.slice(1);
+                    btn.disabled = false;
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

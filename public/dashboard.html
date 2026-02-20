@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - AI Lead Booker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/dashboard.css?v=6">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div>
+                    <h1 data-i18n="app_title">🤖 AI Lead Booker</h1>
+                    <p data-i18n="app_subtitle">Intelligent lead qualification and booking automation</p>
+                </div>
+            </div>
+            <button onclick="handleLogout()" class="btn" style="padding: 0.5rem 1.5rem; font-size: 0.9rem;">
+                Sign Out 🚪
+            </button>
+        </header>
+
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="leads">👥 Leads</button>
+            <button class="tab-btn" data-tab="analytics">📊 Analytics</button>
+            <button class="tab-btn" data-tab="campaigns">🚀 Campaigns</button>
+            <button class="tab-btn" data-tab="summary">📈 Summary</button>
+            <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+        </nav>
+
+        <!-- LEADS TAB -->
+        <div id="leads-tab" class="tab-content active">
+            <div class="card">
+                <h2 style="margin-bottom: 1rem;">Lead Management</h2>
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <input type="text" id="lead-search" placeholder="Search leads..."
+                            style="width: 100%; padding: 0.75rem 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary);">
+                    </div>
+                    <div style="display: flex; gap: 1rem;">
+                        <button class="btn" onclick="openAddLeadModal()"
+                            style="height: 42px; display: flex; align-items: center; justify-content: center; padding: 0 1.5rem;">
+                            Add Lead
+                        </button>
+                        <select id="lead-status-filter"
+                            style="height: 42px; padding: 0 2.5rem 0 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary); appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'white\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em;">
+                            <option value="all">All Statuses</option>
+                            <option value="new">New</option>
+                            <option value="qualifying">Qualifying</option>
+                            <option value="ready_to_book">Ready to Book</option>
+                            <option value="booked">Booked</option>
+                            <option value="closed">Closed</option>
+                            <option value="disqualified">Disqualified</option>
+                        </select>
+                        <select id="lead-sort"
+                            style="height: 42px; padding: 0 2.5rem 0 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary); appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'white\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e'); background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em;">
+                            <option value="updated_desc">Last Contact (Newest)</option>
+                            <option value="updated_asc">Last Contact (Oldest)</option>
+                            <option value="created_desc">Created (Newest)</option>
+                            <option value="created_asc">Created (Oldest)</option>
+                        </select>
+                        <button class="btn" onclick="loadLeads()"
+                            style="height: 42px; display: flex; align-items: center; justify-content: center; padding: 0 1.5rem;">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Add Lead Modal -->
+                <div id="add-lead-modal"
+                    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;">
+                    <div
+                        style="background: #1e293b; padding: 2rem; border-radius: 12px; width: 90%; max-width: 500px; border: 1px solid rgba(255,255,255,0.1);">
+                        <h2 style="margin-bottom: 1.5rem;">Add New Lead</h2>
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.5rem;">Name</label>
+                            <input type="text" id="new-lead-name" placeholder="John Doe"
+                                style="width: 100%; padding: 0.75rem; border-radius: 6px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white;">
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.5rem;">Email</label>
+                            <input type="email" id="new-lead-email" placeholder="john@example.com"
+                                style="width: 100%; padding: 0.75rem; border-radius: 6px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white;">
+                        </div>
+                        <div style="margin-bottom: 1.5rem;">
+                            <label style="display: block; margin-bottom: 0.5rem;">Company</label>
+                            <input type="text" id="new-lead-company" placeholder="Acme Inc"
+                                style="width: 100%; padding: 0.75rem; border-radius: 6px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white;">
+                        </div>
+                        <div style="display: flex; gap: 1rem;">
+                            <button class="btn" onclick="submitNewLead()" style="flex: 1;">Save Lead</button>
+                            <button class="btn-secondary" onclick="closeAddLeadModal()" style="flex: 1;">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="spinner" id="leads-spinner"></div>
+                <div id="leads-container" style="display:none;">
+                    <div class="table-container">
+                        <table id="leads-table">
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>Name</th>
+                                    <th>Status</th>
+                                    <th>Last Contact</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leads-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ANALYTICS TAB -->
+        <div id="analytics-tab" class="tab-content">
+            <!-- Overview Cards -->
+            <div class="card-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="metric-sent">0</div>
+                    <div class="stat-label">Sent Today / Total</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="metric-replies">0</div>
+                    <div class="stat-label">Replies</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="metric-interested">0</div>
+                    <div class="stat-label">Interested</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="metric-booked">0</div>
+                    <div class="stat-label">Booked</div>
+                </div>
+            </div>
+
+            <!-- Conversion Funnel -->
+            <div class="card">
+                <h2 style="margin-bottom: 1rem;">Conversion Funnel</h2>
+                <div class="chart-container">
+                    <canvas id="funnel-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Activity Timeline -->
+            <div class="card">
+                <h2 style="margin-bottom: 1rem;">Activity Timeline (Last 7 Days)</h2>
+                <div class="chart-container">
+                    <canvas id="timeline-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- SUMMARY TAB -->
+        <div id="summary-tab" class="tab-content">
+            <div class="card">
+                <h2 style="margin-bottom: 1rem;">Daily Summary</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 2rem;">Today's performance at a glance</p>
+
+                <div class="card-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="summary-sent">0</div>
+                        <div class="stat-label">Sent Today</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="summary-replies">0</div>
+                        <div class="stat-label">Replies Today</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="summary-rate">0%</div>
+                        <div class="stat-label">Response Rate</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="summary-booked">0</div>
+                        <div class="stat-label">Bookings Today</div>
+                    </div>
+                </div>
+
+                <!-- Hot Leads -->
+                <div id="hot-leads-container" style="margin-top: 2rem;">
+                    <h3 style="margin-bottom: 1rem;">🔥 Hot Leads</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>Name</th>
+                                    <th>Status</th>
+                                    <th>Engagement</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hot-leads-tbody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CAMPAIGNS TAB -->
+        <div id="campaigns-tab" class="tab-content">
+            <div class="card">
+                <h2 style="margin-bottom: 1rem;">🚀 Outbound Campaigns</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 2rem;">Automated lead generation and outreach</p>
+
+                <div class="card-grid" style="grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+                    <!-- Configuration -->
+                    <div>
+                        <h3 style="margin-bottom: 1.5rem;">Configuration</h3>
+                        <div class="form-group" style="margin-bottom: 1.5rem;">
+                            <label for="campaign-niche" style="display: block; margin-bottom: 0.5rem;">Target
+                                Niche</label>
+                            <input type="text" id="campaign-niche" placeholder="e.g. Gym Owners, Real Estate Agents"
+                                style="width: 100%; padding: 0.75rem 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary);">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1.5rem;">
+                            <label for="campaign-limit" style="display: block; margin-bottom: 0.5rem;">Daily Sending
+                                Limit</label>
+                            <input type="number" id="campaign-limit" value="50" min="1" max="100"
+                                style="width: 100%; padding: 0.75rem 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary);">
+                        </div>
+                        <button id="campaign-btn" class="btn"
+                            style="width: 100%; padding: 1rem; background: var(--primary); font-weight: 600;">
+                            ▶️ START CAMPAIGN
+                        </button>
+                    </div>
+
+                    <!-- Live Status -->
+                    <div>
+                        <h3 style="margin-bottom: 1.5rem;">Live Status</h3>
+
+                        <div
+                            style="background: #0f172a; border-radius: 12px; padding: 1.5rem; height: 300px; display: flex; flex-direction: column;">
+                            <div
+                                style="display: flex; justify-content: space-between; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;">
+                                <span style="font-family: monospace; color: var(--text-secondary);">System
+                                    Console</span>
+                                <span id="campaign-status"
+                                    style="font-size: 0.875rem; color: var(--text-muted);">Stopped</span>
+                            </div>
+                            <div id="campaign-console"
+                                style="flex: 1; overflow-y: auto; font-family: monospace; font-size: 0.875rem; color: #4ade80;">
+                                > System ready...<br>
+                                > Waiting for command...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Campaign Stats -->
+                <div class="card-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="camp-sent">0</div>
+                        <div class="stat-label">Sent Today</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="camp-generated">0</div>
+                        <div class="stat-label">Leads Generated</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="camp-status">Idle</div>
+                        <div class="stat-label">Current Status</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+    </div>
+
+    <!-- CAMPAIGNS TAB -->
+    <div id="campaigns-tab" class="tab-content">
+        <div class="card">
+            <h2 style="margin-bottom: 2rem;">🚀 Outbound Campaigns</h2>
+
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary);">Target
+                        Niche</label>
+                    <input type="text" id="campaign-niche" placeholder="e.g. Gym Owners, Real Estate Agents"
+                        style="width: 100%; padding: 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 1.1rem;">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary);">Daily Sending
+                        Limit</label>
+                    <input type="number" id="campaign-limit" value="50" min="10" max="1000"
+                        style="width: 100%; padding: 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 1.1rem;">
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-bottom: 3rem;">
+                <button id="campaign-btn" onclick="toggleCampaign()"
+                    style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 1.5rem 4rem; font-size: 1.5rem; font-weight: bold; border-radius: 50px; border: none; cursor: pointer; color: white; transition: all 0.3s ease; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);">
+                    START CAMPAIGN ▶️
+                </button>
+                <p id="campaign-status-text" style="margin-top: 1rem; color: var(--text-secondary);">Ready to launch</p>
+            </div>
+
+            <!-- Live Console -->
+            <div
+                style="background: #0f172a; border-radius: 12px; padding: 1.5rem; font-family: 'Monaco', 'Consolas', monospace; height: 300px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1);">
+                <div
+                    style="color: #64748b; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;">
+                    SYSTEM CONSOLE_
+                </div>
+                <div id="campaign-console"
+                    style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.9rem;">
+                    <div style="color: #cbd5e1;">> System ready...</div>
+                    <div style="color: #cbd5e1;">> Waiting for command...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="settings-tab" class="tab-content">
+
+        <!-- App Preferences Section -->
+        <div class="card" style="margin-bottom: 2rem;">
+            <h2 style="margin-bottom: 1rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem;"
+                data-i18n="settings_title">⚙️ App Settings</h2>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
+
+                <!-- Language -->
+                <div>
+                    <label style="display:block; margin-bottom:0.5rem; font-weight:600;"
+                        data-i18n="language_label">Language 🌐</label>
+                    <select id="app-language" onchange="changeLanguage(this.value)" class="btn btn-secondary"
+                        style="width:100%; justify-content:space-between; display:flex; align-items:center;">
+                        <option value="en">English (US)</option>
+                        <option value="zh">Chinese (Mandarin) - 中文</option>
+                        <option value="es">Spanish - Español</option>
+                        <option value="hi">Hindi - हिन्दी</option>
+                        <option value="ar">Arabic - العربية</option>
+                        <option value="pt">Portuguese - Português</option>
+                        <option value="bn">Bengali - বাংলা</option>
+                        <option value="ru">Russian - Русский</option>
+                        <option value="ja">Japanese - 日本語</option>
+                        <option value="ur">Urdu - اردو</option>
+                    </select>
+                </div>
+
+                <!-- Billing -->
+                <div>
+                    <label style="display:block; margin-bottom:0.5rem; font-weight:600;"
+                        data-i18n="billing_label">Subscription 💳</label>
+                    <button class="btn btn-secondary" style="width:100%; justify-content:center;"
+                        onclick="window.location.href='/billing.html'" data-i18n="manage_billing">
+                        Manage Plan
+                    </button>
+                    <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.5rem;"
+                        data-i18n="billing_desc">
+                        Manage your subscription, payment methods, and invoices.
+                    </p>
+                </div>
+
+                <!-- Actions -->
+                <div>
+                    <label style="display:block; margin-bottom:0.5rem; font-weight:600;" data-i18n="help_label">Help &
+                        Support 🎓</label>
+                    <a href="/how-to-use.html" class="btn btn-secondary"
+                        style="display:flex; justify-content:center; text-decoration:none; width:100%;"
+                        data-i18n="rewatch_onboarding">
+                        How to Use Guide
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Connection Section (New) -->
+    <div class="card" style="margin-bottom: 2rem;">
+        <h2 style="margin-bottom: 1rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem;">
+            📧 Email Connection
+        </h2>
+        <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 300px;">
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    To enable <strong>Real-Time Reply Detection</strong>, you must connect your Gmail using an App
+                    Password.
+                </p>
+                <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Google App Password</label>
+                <div style="display: flex; gap: 1rem;">
+                    <input type="password" id="app-password" placeholder="xxxx xxxx xxxx xxxx"
+                        style="flex: 1; padding: 0.75rem 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary);">
+                    <button class="btn" onclick="saveEmailConfig()">Save</button>
+                </div>
+            </div>
+            <div style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px;">
+                <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">How to get an App Password:</h3>
+                <ol style="padding-left: 1.5rem; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                    <li>Go to <strong>Google Account > Security</strong>.</li>
+                    <li>Enable <strong>2-Step Verification</strong>.</li>
+                    <li>Search for "App Passwords".</li>
+                    <li>Create one named "AI Booker".</li>
+                    <li>Copy the 16-character code here.</li>
+                </ol>
+            </div>
+        </div>
+        <div id="email-config-status" style="margin-top: 1rem; font-weight: 500;"></div>
+    </div>
+
+    <!-- Pitch Configuration Section -->
+    <div class="card">
+        <h2 style="margin-bottom: 1rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem;"
+            data-i18n="pitch_config_title">📧 Pitch Configuration</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 2rem;" data-i18n="pitch_config_desc">
+            Customize your sales pitch flow. Use <code>{{name}}</code> for lead's name.
+        </p>
+
+        <!-- Initial Pitch -->
+        <div style="margin-bottom: 2rem;">
+            <label for="pitch-initial" style="display: block; margin-bottom: 0.5rem; font-weight: 600;"
+                data-i18n="pitch_initial_label">
+                1. Initial Pitch
+                <span style="color: var(--text-secondary); font-weight: 400;">(First email sent)</span>
+            </label>
+            <textarea id="pitch-initial" rows="8"
+                style="width: 100%; padding: 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary); font-family: inherit; resize: vertical;"
+                placeholder="Your initial sales pitch..."></textarea>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+            <!-- Yes Response -->
+            <div>
+                <label for="pitch-yes" style="display: block; margin-bottom: 0.5rem; font-weight: 600;"
+                    data-i18n="pitch_yes_label">
+                    ✅ Yes Response
+                </label>
+                <textarea id="pitch-yes" rows="6"
+                    style="width: 100%; padding: 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary); font-family: inherit; resize: vertical;"></textarea>
+            </div>
+
+            <!-- No Response -->
+            <div>
+                <label for="pitch-no" style="display: block; margin-bottom: 0.5rem; font-weight: 600;"
+                    data-i18n="pitch_no_label">
+                    ❌ No Response (Reconvince)
+                </label>
+                <textarea id="pitch-no" rows="6"
+                    style="width: 100%; padding: 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary); font-family: inherit; resize: vertical;"></textarea>
+            </div>
+
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+            <button class="btn" onclick="savePitch()" style="flex: 1;" data-i18n="save_pitch">💾 Save Custom
+                Pitch</button>
+            <button class="btn-secondary btn" onclick="resetPitch()" style="flex: 1;" data-i18n="reset_pitch">🔄
+                Reset to AI Recommended</button>
+        </div>
+
+        <div id="pitch-status" style="margin-top: 1rem; padding: 1rem; border-radius: 8px; display: none;"></div>
+    </div>
+    </div>
+    </div>
+    </div>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Dashboard JS -->
+    <script src="js/dashboard.js?v=4"></script>
+</body>
+
+</html>

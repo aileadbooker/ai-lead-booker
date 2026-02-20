@@ -1,0 +1,15 @@
+# Intermediate files (generated/regenerated)
+.tmp/
+
+# Secrets and credentials
+.env
+credentials.json
+token.json
+
+# Standard Python ignores
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.env/

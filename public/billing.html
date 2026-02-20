@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billing Portal - AI Lead Booker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: #1e293b;
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            margin: 1rem;
+        }
+
+        h1 {
+            margin-bottom: 0.5rem;
+        }
+
+        p {
+            color: #94a3b8;
+            margin-bottom: 2rem;
+        }
+
+        .plan-card {
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid #6366f1;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            text-align: left;
+        }
+
+        .btn {
+            background: white;
+            color: #0f172a;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+
+        .btn:hover {
+            background: #f1f5f9;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: #94a3b8;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div style="margin-bottom: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">💳</div>
+            <h1>Billing Portal</h1>
+            <p>Manage your subscription and payment methods</p>
+        </div>
+
+        <div class="plan-card">
+            <div style="font-size: 0.875rem; color: #6366f1; font-weight: 600; margin-bottom: 0.25rem;">CURRENT PLAN
+            </div>
+            <div
+                style="font-size: 1.5rem; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+                Growth Plan
+                <span
+                    style="font-size: 0.875rem; background: #6366f1; color: white; padding: 0.25rem 0.75rem; border-radius: 99px;">Active</span>
+            </div>
+            <div style="color: #94a3b8; margin-top: 0.5rem;">$1,999.00 / month • Renews on Mar 18, 2026</div>
+        </div>
+
+        <button class="btn" onclick="openBillingPortal()">Update Payment Method</button>
+        <button class="btn btn-secondary" onclick="alert('Invoice downloaded')">Download Latest Invoice</button>
+        <button class="btn btn-secondary" style="margin-top: 1rem;" onclick="window.location.href='/dashboard'">&larr;
+            Back to Dashboard</button>
+    </div>
+
+    <script>
+        // Check authentication on load
+        fetch('/api/me').then(res => {
+            if (res.status === 401) {
+                // Redirect user to login so they get a valid session
+                window.location.href = '/login.html';
+            }
+        }).catch(() => { });
+
+        async function openBillingPortal() {
+            const btn = document.querySelector('.btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Loading Portal...';
+            try {
+                const res = await fetch('/api/create-portal-session', { method: 'POST' });
+
+                // Check if response is JSON
+                const contentType = res.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await res.json();
+                    if (data.url) {
+                        window.location.href = data.url;
+                    } else if (data.error) {
+                        alert('Error: ' + data.error);
+                        if (data.error === 'Unauthorized') {
+                            window.location.href = '/login.html';
+                        }
+                    } else {
+                        alert('Failed to open portal');
+                    }
+                } else {
+                    // Likely HTML redirect (Auth Check Failed)
+                    window.location.href = '/login.html';
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Connection error. Please try again.');
+            } finally {
+                btn.innerHTML = originalText;
+            }
+        }
+    </script>
+</body>
+
+</html>

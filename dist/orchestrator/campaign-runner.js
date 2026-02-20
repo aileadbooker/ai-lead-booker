@@ -1,0 +1,211 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const database_1 = __importDefault(require("../config/database"));
+const lead_generator_1 = __importDefault(require("../ingestion/lead-generator"));
+const llm_service_1 = require("../intelligence/llm-service");
+const email_service_1 = __importDefault(require("../ingestion/email-service"));
+/**
+ * Campaign Runner
+ * Manages outbound campaigns, throttling, and sending
+ */
+class CampaignRunner {
+    constructor() {
+        this.isRunning = false;
+        this.intervalId = null;
+        // Campaign State
+        this.status = 'idle';
+        this.currentNiche = '';
+        this.dailyLimit = 50;
+        this.sentToday = 0;
+        this.lastRunDate = '';
+        this.llmService = new llm_service_1.LLMService();
+    }
+    /**
+     * Start the campaign
+     */
+    async start(niche, dailyLimit) {
+        if (this.status === 'running')
+            return;
+        console.log(`🚀 Starting campaign for niche: ${niche} (Limit: ${dailyLimit}/day)`);
+        this.status = 'running';
+        this.currentNiche = niche;
+        this.dailyLimit = dailyLimit;
+        // Reset daily count if it's a new day
+        const today = new Date().toISOString().split('T')[0];
+        if (this.lastRunDate !== today) {
+            this.sentToday = 0;
+            this.lastRunDate = today;
+        }
+        // Initialize from DB if 0 (handling restarts)
+        if (this.sentToday === 0) {
+            const countResult = await database_1.default.query(`SELECT COUNT(*) as count FROM messages 
+                 WHERE direction = 'outbound' 
+                 AND date(sent_at) = date('now')`);
+            this.sentToday = parseInt(countResult.rows[0].count) || 0;
+            console.log(`📊 Restored daily count: ${this.sentToday}/${this.dailyLimit}`);
+        }
+        // Start processing loop
+        this.processQueue(); // Run immediately
+        this.intervalId = setInterval(() => this.processQueue(), 60000); // Check every minute
+    }
+    /**
+     * Stop/Pause the campaign
+     */
+    stop() {
+        console.log('🛑 Stopping campaign');
+        this.status = 'idle'; // effectively "stopped" for MVP, 'paused' could keep state
+        if (this.intervalId) {
+            clearInterval(this.intervalId);
+            this.intervalId = null;
+        }
+    }
+    /**
+     * Get current stats
+     */
+    /**
+     * Get current stats
+     */
+    async getStats() {
+        // Always fetch truth from DB to avoid memory drift
+        const countResult = await database_1.default.query(`SELECT COUNT(*) as count FROM messages 
+             WHERE direction = 'outbound' 
+             AND date(sent_at) = date('now')`);
+        this.sentToday = parseInt(countResult.rows[0].count) || 0;
+        return {
+            status: this.status,
+            niche: this.currentNiche,
+            sentToday: this.sentToday,
+            dailyLimit: this.dailyLimit
+        };
+    }
+    /**
+     * Main processing loop
+     */
+    async processQueue() {
+        if (this.status !== 'running')
+            return;
+        // 1. Check daily limit
+        const today = new Date().toISOString().split('T')[0];
+        if (this.lastRunDate !== today) {
+            this.sentToday = 0; // Reset for new day
+            this.lastRunDate = today;
+        }
+        if (this.sentToday >= this.dailyLimit) {
+            console.log(`⚠️ Daily limit reached (${this.sentToday}/${this.dailyLimit}). Pausing until tomorrow.`);
+            return;
+        }
+        try {
+            // 2. Find "new" leads that haven't been contacted yet
+            // We use the 'outbound_campaign' source and 'new' status
+            let leadsToContact = await database_1.default.query(`SELECT * FROM leads 
+                 WHERE source = 'outbound_campaign' 
+                 AND status = 'new'
+                 LIMIT 5` // Batches of 5 to avoid overwhelming
+            );
+            // 3. If no leads, generate more!
+            if (leadsToContact.rows.length === 0) {
+                console.log('📉 No new leads in queue. Generating fresh leads...');
+                const newLeads = await lead_generator_1.default.generateLeads(this.currentNiche, 20); // Generate batch of 20
+                if (newLeads.length === 0) {
+                    console.log('⚠️ Could not generate leads. Retrying later.');
+                    return;
+                }
+                // Refetch to get the DB rows (consistent format)
+                leadsToContact = await database_1.default.query(`SELECT * FROM leads 
+                     WHERE id IN (${newLeads.map(l => `'${l.id}'`).join(',')})`);
+            }
+            // 4. Process outreach
+            for (const row of leadsToContact.rows) {
+                if (this.sentToday >= this.dailyLimit)
+                    break;
+                const lead = {
+                    id: row.id,
+                    email: row.email,
+                    name: row.name,
+                    company: row.company,
+                    source: row.source, // Cast to any to bypass strict literal check for now
+                    status: row.status,
+                    created_at: new Date(row.created_at),
+                    updated_at: new Date(row.updated_at),
+                    followup_count: row.followup_count || 0,
+                    opted_out: !!row.opted_out
+                };
+                const success = await this.sendInitialOutreach(lead);
+                if (success) {
+                    this.sentToday++;
+                    // Slight delay to be nice to SMTP
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            }
+        }
+        catch (error) {
+            console.error('Error in campaign runner:', error);
+        }
+    }
+    /**
+     * Send the first email to a lead
+     */
+    async sendInitialOutreach(lead) {
+        try {
+            console.log(`📧 Sending initial outreach to ${lead.email}...`);
+            // 1. Get initial pitch decision from LLM (simulated)
+            const decision = await this.llmService.getDecision(lead, [], {
+                business_name: 'AI Agency',
+                // industry: 'Marketing', // Removed invalid property
+                services: [],
+                tone: 'professional',
+                confidence_threshold: 0.8
+            }, []);
+            if (decision.message_draft) {
+                // 2. Send Email
+                const result = await email_service_1.default.sendEmail(lead, 'Question for you', this.formatEmailBody(decision.message_draft));
+                if (!result.sent) {
+                    console.error(`Failed to send email to ${lead.email}: ${result.reason}`);
+                    return false;
+                }
+                // 3. Update Lead Status
+                await database_1.default.query(`UPDATE leads 
+                     SET status = 'contacted', 
+                         last_contact_at = datetime('now') 
+                     WHERE id = $1`, [lead.id]);
+                // 4. Log Message
+                await database_1.default.query(`INSERT INTO messages (id, lead_id, direction, message_id, in_reply_to, subject, body, sent_at)
+                     VALUES ($1, $2, 'outbound', $3, $4, datetime('now'))`, [uuidv4(), lead.id, 'Question for you', decision.message_draft]);
+                console.log(`✅ Sent to ${lead.email}`);
+                return true;
+            }
+            return false;
+        }
+        catch (error) {
+            console.error(`Failed to send outreach to ${lead.email}:`, error);
+            return false;
+        }
+    }
+    /**
+     * Convert markdown-style text to HTML
+     */
+    formatEmailBody(text) {
+        if (!text)
+            return '';
+        let html = text
+            // Bold (**text**)
+            .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+            // Italic (*text*)
+            .replace(/\*(.*?)\*/g, '<i>$1</i>')
+            // Newlines to <br>
+            .replace(/\n/g, '<br>');
+        return `<div style="font-family: sans-serif; font-size: 14px; line-height: 1.5; color: #333;">${html}</div>`;
+    }
+}
+// Helper to generate UUIDs since we didn't import inside class
+function uuidv4() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+exports.default = new CampaignRunner();
+//# sourceMappingURL=campaign-runner.js.map

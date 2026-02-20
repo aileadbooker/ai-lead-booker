@@ -1,0 +1,1 @@
+{"version":3,"file":"email-sender.d.ts","sourceRoot":"","sources":["../../src/actions/email-sender.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,IAAI,EAAE,eAAe,EAAkB,MAAM,UAAU,CAAC;AAMjE;;GAEG;AACH,qBAAa,WAAW;IAEpB;;OAEG;IACG,WAAW,CACb,IAAI,EAAE,IAAI,EACV,cAAc,EAAE,MAAM,EACtB,OAAO,CAAC,EAAE,MAAM,GACjB,OAAO,CAAC,eAAe,CAAC;IAoF3B;;OAEG;YACW,iBAAiB;CAsBlC;;AAED,wBAAiC"}
