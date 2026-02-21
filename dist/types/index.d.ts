@@ -1,7 +1,7 @@
 /**
  * Core TypeScript type definitions for AI Lead Booker System
  */
-export type LeadSource = 'email' | 'webform' | 'outbound_campaign';
+export type LeadSource = 'email' | 'webform' | 'outbound_campaign' | 'web_scrape';
 export type LeadStatus = 'new' | 'qualifying' | 'awaiting_response' | 'ready_to_book' | 'booked' | 'escalated' | 'closed';
 export interface Lead {
     id: string;

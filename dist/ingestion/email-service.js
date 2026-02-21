@@ -73,10 +73,25 @@ class EmailService {
             return [];
         let connection = null;
         try {
+            // Dynamic IMAP Config
+            let imapUser = config_1.config.imap.user;
+            let imapPass = config_1.config.imap.pass;
+            // Try to load from DB
+            try {
+                const userRes = await database_1.default.query('SELECT email, google_app_password FROM users WHERE google_app_password IS NOT NULL LIMIT 1');
+                if (userRes.rows.length > 0) {
+                    imapUser = userRes.rows[0].email;
+                    imapPass = userRes.rows[0].google_app_password;
+                    console.log(`Using App Password for IMAP (${imapUser})`);
+                }
+            }
+            catch (e) {
+                console.warn('Failed to load IMAP creds from DB, using env fallback');
+            }
             const imapConfig = {
                 imap: {
-                    user: config_1.config.imap.user,
-                    password: config_1.config.imap.pass,
+                    user: imapUser,
+                    password: imapPass,
                     host: config_1.config.imap.host,
                     port: config_1.config.imap.port,
                     tls: true,
@@ -214,22 +229,36 @@ class EmailService {
      * Get the appropriate transporter (OAuth or SMTP)
      */
     async getTransporter() {
-        // 1. Try to find a user with Google tokens
+        // 1. Try to find a user with Google tokens OR App Password
         try {
-            const res = await database_1.default.query('SELECT email, access_token, refresh_token, google_id FROM users WHERE access_token IS NOT NULL LIMIT 1');
+            const res = await database_1.default.query('SELECT email, access_token, refresh_token, google_id, google_app_password FROM users LIMIT 1');
             if (res.rows.length > 0) {
                 const user = res.rows[0];
-                return nodemailer_1.default.createTransport({
-                    service: 'gmail',
-                    auth: {
-                        type: 'OAuth2',
-                        user: user.email,
-                        clientId: config_1.config.googleClientId,
-                        clientSecret: config_1.config.googleClientSecret,
-                        refreshToken: user.refresh_token,
-                        accessToken: user.access_token,
-                    },
-                });
+                // A. Try App Password (Preferred for IMAP/SMTP simplicity)
+                if (user.google_app_password) {
+                    console.log(`Using App Password for ${user.email}`);
+                    return nodemailer_1.default.createTransport({
+                        service: 'gmail',
+                        auth: {
+                            user: user.email,
+                            pass: user.google_app_password,
+                        },
+                    });
+                }
+                // B. Try OAuth (Fallback)
+                if (user.access_token) {
+                    return nodemailer_1.default.createTransport({
+                        service: 'gmail',
+                        auth: {
+                            type: 'OAuth2',
+                            user: user.email,
+                            clientId: config_1.config.googleClientId,
+                            clientSecret: config_1.config.googleClientSecret,
+                            refreshToken: user.refresh_token,
+                            accessToken: user.access_token,
+                        },
+                    });
+                }
             }
         }
         catch (error) {

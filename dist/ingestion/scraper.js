@@ -221,18 +221,36 @@ class WebScraper {
             const html = response.data;
             if (typeof html !== 'string')
                 return null;
-            // Robust Email Regex
-            const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/gi;
+            // Robust Email Regex (Strict)
+            // - Must have at least 2 chars before @
+            // - Domain must have at least one dot
+            // - TLD must be 2+ chars
+            const emailRegex = /([a-zA-Z0-9._-]{2,}@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,})/gi;
             const matches = html.match(emailRegex);
             if (matches) {
-                const validEmails = matches.filter(email => {
-                    const lower = email.toLowerCase();
-                    return !lower.includes('sentry') &&
-                        !lower.includes('example') &&
-                        !lower.includes('wixpress') &&
-                        !lower.match(/\.(png|jpg|jpeg|gif|svg|css|js)$/);
+                const uniqueEmails = [...new Set(matches.map(e => e.toLowerCase()))];
+                const validEmails = uniqueEmails.filter(email => {
+                    // 1. Filter out common junk/placeholders
+                    if (email.includes('sentry') ||
+                        email.includes('example') ||
+                        email.includes('wixpress') ||
+                        email.includes('domain.com') ||
+                        email.includes('email.com') ||
+                        email.includes('godaddy') ||
+                        email.includes('name@') ||
+                        email.includes('user@') ||
+                        email.includes('admin@') && !email.includes('info'))
+                        return false;
+                    // 2. Filter out image/code false positives
+                    if (email.match(/\.(png|jpg|jpeg|gif|svg|css|js|webp|woff|woff2|ttf|eot)$/))
+                        return false;
+                    // 3. Length checks
+                    if (email.length > 60 || email.length < 6)
+                        return false;
+                    return true;
                 });
                 if (validEmails.length > 0) {
+                    // Prioritize specific roles
                     const priority = validEmails.find(e => e.startsWith('info') || e.startsWith('contact') || e.startsWith('hello') || e.startsWith('sales'));
                     return priority || validEmails[0];
                 }

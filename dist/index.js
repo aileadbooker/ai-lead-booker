@@ -17,6 +17,7 @@ const auth_1 = __importDefault(require("./api/auth"));
 const campaigns_1 = __importDefault(require("./api/campaigns"));
 const leads_1 = __importDefault(require("./api/leads"));
 const checkout_1 = __importDefault(require("./api/checkout"));
+const settings_1 = __importDefault(require("./api/settings"));
 const auth_2 = require("./middleware/auth");
 // ...
 // Start Daily Reporter
@@ -130,9 +131,15 @@ async function main() {
         console.log('Google Auth Success, User:', req.user);
         res.redirect('/dashboard'); // Middleware will handle redirection based on status
     });
+    // Helper to check free access whitelist
+    const isFreeAccess = (user) => {
+        const freeAccessEmails = ['Kevin.johnson.jr723@gmail.com', 'ai.leadbooker@gmail.com'];
+        return user && user.email && freeAccessEmails.includes(user.email);
+    };
     // Onboarding & Payment Routes
     app.get('/checkout', (req, res) => {
-        if (req.isAuthenticated() && req.user.has_paid) {
+        const user = req.user;
+        if (req.isAuthenticated() && (user?.has_paid || isFreeAccess(user))) {
             return res.redirect('/dashboard');
         }
         res.sendFile(path_1.default.join(__dirname, '../public/checkout.html'));
@@ -140,9 +147,10 @@ async function main() {
     app.get('/onboarding', (req, res) => {
         if (!req.isAuthenticated())
             return res.redirect('/');
-        if (!req.user.has_paid)
+        const user = req.user;
+        if (!user.has_paid && !isFreeAccess(user))
             return res.redirect('/checkout');
-        if (req.user.onboarding_completed)
+        if (user.onboarding_completed)
             return res.redirect('/dashboard');
         res.sendFile(path_1.default.join(__dirname, '../public/onboarding.html'));
     });
@@ -203,6 +211,7 @@ async function main() {
     app.use('/api', pitch_1.default);
     app.use('/api/leads', leads_1.default);
     app.use('/api', checkout_1.default);
+    app.use('/api/settings', settings_1.default);
     // API: Get settings
     app.get('/api/settings', async (req, res) => {
         try {

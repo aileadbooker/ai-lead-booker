@@ -18,12 +18,18 @@ router.get('/analytics', async (req, res) => {
             days = 7;
         else if (period === 'month')
             days = 30;
+        else if (period === 'all')
+            days = 36500; // 100 years
         let startDate;
         if (period === 'today') {
             // Start of Today (00:00:00)
             const d = new Date();
             d.setHours(0, 0, 0, 0);
             startDate = d;
+        }
+        else if (period === 'all') {
+            // All time (Epoch)
+            startDate = new Date(0);
         }
         else {
             // Rolling window for other periods

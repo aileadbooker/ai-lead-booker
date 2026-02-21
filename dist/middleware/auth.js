@@ -27,7 +27,9 @@ const isAuthenticated = (req, res, next) => {
     if (req.isAuthenticated && req.isAuthenticated()) {
         const user = req.user;
         // 1. Check Payment
-        if (!user.has_paid) {
+        const freeAccessEmails = ['Kevin.johnson.jr723@gmail.com', 'ai.leadbooker@gmail.com'];
+        const isFreeAccessUser = user && user.email && freeAccessEmails.includes(user.email);
+        if (!user.has_paid && !isFreeAccessUser) {
             // Allow API requests to succeed for the payment endpoint itself
             if (req.path === '/api/checkout/success' || req.originalUrl.includes('/create-checkout-session'))
                 return next();

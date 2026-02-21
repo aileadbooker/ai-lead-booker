@@ -32,6 +32,7 @@ declare class CampaignRunner {
         sentToday: number;
         dailyLimit: number;
     }>;
+    private isProcessingQueue;
     /**
      * Main processing loop
      */
