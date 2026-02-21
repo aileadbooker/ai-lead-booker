@@ -104,6 +104,7 @@ async function main() {
 
     // 3. Start Express server (for webhooks and future API)
     const app = express();
+    app.set('trust proxy', 1); // Trust first proxy (required for Railway + secure cookies)
     app.use(express.json());
 
     app.get('/health', (req, res) => {
