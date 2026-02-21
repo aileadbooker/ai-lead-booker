@@ -104,9 +104,9 @@ CREATE TABLE IF NOT EXISTS analytics_events (
     FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS IF NOT EXISTS idx_analytics_event_type ON analytics_events(event_type);
-CREATE INDEX IF NOT EXISTS IF NOT EXISTS idx_analytics_lead_id ON analytics_events(lead_id);
-CREATE INDEX IF NOT EXISTS IF NOT EXISTS idx_analytics_created_at ON analytics_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_analytics_event_type ON analytics_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_analytics_lead_id ON analytics_events(lead_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_created_at ON analytics_events(created_at);
 
 -- Business configuration with shadow/live mode
 CREATE TABLE IF NOT EXISTS business_config (
