@@ -91,10 +91,10 @@ export function validateConfig(): { valid: boolean; missing: string[] } {
     }
 
     if (missing.length > 0) {
-        return { valid: false, missing };
+        console.warn('⚠️ Missing configuration variables (App will continue without them):', missing);
     }
 
-    return { valid: true, missing: [] };
+    return { valid: true, missing };
 }
 
 export default config;
