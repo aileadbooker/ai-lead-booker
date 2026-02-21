@@ -17,9 +17,9 @@ CREATE TABLE IF NOT EXISTS leads (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_leads_next_action ON leads(next_action_at) WHERE opted_out = 0;
-CREATE INDEX idx_leads_email ON leads(email);
-CREATE INDEX idx_leads_status ON leads(status);
+CREATE INDEX IF NOT EXISTS idx_leads_next_action ON leads(next_action_at) WHERE opted_out = 0;
+CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
+CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 
 -- Email threading support
 CREATE TABLE IF NOT EXISTS messages (
@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS messages (
   sent_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_messages_lead ON messages(lead_id);
-CREATE INDEX idx_messages_thread ON messages(gmail_thread_id);
+CREATE INDEX IF NOT EXISTS idx_messages_lead ON messages(lead_id);
+CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(gmail_thread_id);
 
 -- Conversation state tracking
 CREATE TABLE IF NOT EXISTS conversations (
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS conversations (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_conversations_lead ON conversations(lead_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_lead ON conversations(lead_id);
 
 -- LLM structured outputs with fallback tracking
 CREATE TABLE IF NOT EXISTS llm_decisions (
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS llm_decisions (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_llm_decisions_lead ON llm_decisions(lead_id);
+CREATE INDEX IF NOT EXISTS idx_llm_decisions_lead ON llm_decisions(lead_id);
 
 -- Bookings with double-book protection
 CREATE TABLE IF NOT EXISTS bookings (
@@ -76,9 +76,9 @@ CREATE TABLE IF NOT EXISTS bookings (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_bookings_lead ON bookings(lead_id);
-CREATE INDEX idx_bookings_external_event ON bookings(external_event_id);
-CREATE INDEX idx_bookings_scheduled ON bookings(scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_bookings_lead ON bookings(lead_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_external_event ON bookings(external_event_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_scheduled ON bookings(scheduled_at);
 
 -- Escalations
 CREATE TABLE IF NOT EXISTS escalations (
@@ -91,8 +91,8 @@ CREATE TABLE IF NOT EXISTS escalations (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_escalations_lead ON escalations(lead_id);
-CREATE INDEX idx_escalations_resolved ON escalations(resolved);
+CREATE INDEX IF NOT EXISTS idx_escalations_lead ON escalations(lead_id);
+CREATE INDEX IF NOT EXISTS idx_escalations_resolved ON escalations(resolved);
 
 -- Analytics Events Table
 CREATE TABLE IF NOT EXISTS analytics_events (
@@ -104,9 +104,9 @@ CREATE TABLE IF NOT EXISTS analytics_events (
     FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_analytics_event_type ON analytics_events(event_type);
-CREATE INDEX IF NOT EXISTS idx_analytics_lead_id ON analytics_events(lead_id);
-CREATE INDEX IF NOT EXISTS idx_analytics_created_at ON analytics_events(created_at);
+CREATE INDEX IF NOT EXISTS IF NOT EXISTS idx_analytics_event_type ON analytics_events(event_type);
+CREATE INDEX IF NOT EXISTS IF NOT EXISTS idx_analytics_lead_id ON analytics_events(lead_id);
+CREATE INDEX IF NOT EXISTS IF NOT EXISTS idx_analytics_created_at ON analytics_events(created_at);
 
 -- Business configuration with shadow/live mode
 CREATE TABLE IF NOT EXISTS business_config (
@@ -135,8 +135,8 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_knowledge_base_business ON knowledge_base(business_id);
-CREATE INDEX idx_knowledge_base_type ON knowledge_base(type);
+CREATE INDEX IF NOT EXISTS idx_knowledge_base_business ON knowledge_base(business_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_base_type ON knowledge_base(type);
 
 -- Rate limiting
 CREATE TABLE IF NOT EXISTS rate_limits (
@@ -149,8 +149,8 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   UNIQUE(lead_id, period)
 );
 
-CREATE INDEX idx_rate_limits_lead ON rate_limits(lead_id);
-CREATE INDEX idx_rate_limits_reset ON rate_limits(reset_at);
+CREATE INDEX IF NOT EXISTS idx_rate_limits_lead ON rate_limits(lead_id);
+CREATE INDEX IF NOT EXISTS idx_rate_limits_reset ON rate_limits(reset_at);
 
 -- Action log for audit trail
 CREATE TABLE IF NOT EXISTS action_log (
@@ -161,6 +161,6 @@ CREATE TABLE IF NOT EXISTS action_log (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_action_log_lead ON action_log(lead_id);
-CREATE INDEX idx_action_log_type ON action_log(action_type);
-CREATE INDEX idx_action_log_created ON action_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_action_log_lead ON action_log(lead_id);
+CREATE INDEX IF NOT EXISTS idx_action_log_type ON action_log(action_type);
+CREATE INDEX IF NOT EXISTS idx_action_log_created ON action_log(created_at);
