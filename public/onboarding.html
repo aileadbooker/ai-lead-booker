@@ -43,6 +43,24 @@
     </div>
 
     <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('session_id')) {
+                console.log('Returned from checkout, verifying payment...');
+                try {
+                    await fetch('/api/checkout/success', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session_id: params.get('session_id') })
+                    });
+                    // Clean up URL so refresh doesn't re-trigger
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (e) {
+                    console.error('Failed to verify session', e);
+                }
+            }
+        });
+
         document.getElementById('finish-btn').addEventListener('click', async () => {
             try {
                 const response = await fetch('/api/onboarding/complete', {
