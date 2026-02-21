@@ -169,7 +169,12 @@ async function main() {
     app.get('/onboarding', (req, res) => {
         if (!req.isAuthenticated()) return res.redirect('/');
         const user = req.user as any;
-        if (!user.has_paid && !isFreeAccess(user)) return res.redirect('/checkout');
+
+        // Allow access if returning from Stripe checkout
+        if (!user.has_paid && !isFreeAccess(user) && !req.query.session_id) {
+            return res.redirect('/checkout');
+        }
+
         if (user.onboarding_completed) return res.redirect('/dashboard');
 
         res.sendFile(path.join(__dirname, '../public/onboarding.html'));
