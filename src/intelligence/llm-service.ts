@@ -7,12 +7,14 @@ import db from '../config/database';
  * OpenAI LLM Service with mock Y/N flow for testing
  */
 export class LLMService {
-    private openai: OpenAI;
+    private openai?: OpenAI;
 
     constructor() {
-        this.openai = new OpenAI({
-            apiKey: config.openaiApiKey,
-        });
+        if (config.openaiApiKey && config.openaiApiKey !== 'sk-mock-key') {
+            this.openai = new OpenAI({
+                apiKey: config.openaiApiKey,
+            });
+        }
     }
 
     /**
@@ -77,6 +79,10 @@ Instructions:
 ${conversationHistory.length > 0 ? conversationHistory.join('\n') : '(No previous history - this is the first contact)'}
 
 Task: Generate the next move and email draft.`;
+
+            if (!this.openai) {
+                throw new Error('OpenAI client not initialized');
+            }
 
             const completion = await this.openai.chat.completions.create({
                 model: 'gpt-4-turbo-preview',
@@ -257,6 +263,11 @@ For each lead, provide:
 - "email": A PLAUSIBLE public email for that business (e.g. contact@domain.com, info@domain.com). Do NOT invent personal emails like "john.doe452@gmail.com". Use the business domain.
 
 Output strictly valid JSON array. No markdown, no explanations.`;
+
+            if (!this.openai) {
+                console.warn('⚠️ No OpenAI API key, falling back to mock leads');
+                return [];
+            }
 
             const completion = await this.openai.chat.completions.create({
                 model: 'gpt-4-turbo-preview',

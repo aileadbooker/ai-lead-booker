@@ -3,7 +3,7 @@ import { LLMDecision, Lead, BusinessConfig, KnowledgeBaseEntry } from '../types'
  * OpenAI LLM Service with mock Y/N flow for testing
  */
 export declare class LLMService {
-    private openai;
+    private openai?;
     constructor();
     /**
      * Main decision method - delegates to mock for now
