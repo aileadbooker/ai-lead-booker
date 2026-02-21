@@ -16,23 +16,14 @@ if (!fs.existsSync(dbDir) && dbDir !== '.') {
 const db = new Database(dbPath);
 
 try {
-    // Check if the users table exists. If it doesn't, the DB is empty.
-    const hasUsersTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+    // Check if the leads table exists. If it doesn't, the DB is empty.
+    const hasLeadsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='leads'").get();
 
-    if (!hasUsersTable) {
+    if (!hasLeadsTable) {
         console.log("Database is empty. Running initial schema setup...");
         const schema = fs.readFileSync(schemaPath, 'utf8');
         db.exec(schema);
         console.log("Schema setup complete.");
-
-        // Add default admin if setup was run
-        const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
-        db.prepare(`
-            INSERT OR IGNORE INTO admin_users (username, password) 
-            VALUES ('admin', ?)
-        `).run(adminPass);
-        console.log("Default admin account ensured.");
-
     } else {
         console.log("Database already initialized. Skipping setup.");
     }
