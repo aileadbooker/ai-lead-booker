@@ -16,11 +16,12 @@ if (!fs.existsSync(dbDir) && dbDir !== '.') {
 const db = new Database(dbPath);
 
 try {
-    // Check if the leads table exists. If it doesn't, the DB is empty.
+    // Check if essential tables exist.
     const hasLeadsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='leads'").get();
+    const hasUsersTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
 
-    if (!hasLeadsTable) {
-        console.log("Database is empty. Running initial schema setup...");
+    if (!hasLeadsTable || !hasUsersTable) {
+        console.log("Database is missing tables. Running schema setup (idempotent)...");
         const schema = fs.readFileSync(schemaPath, 'utf8');
         db.exec(schema);
         console.log("Schema setup complete.");

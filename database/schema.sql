@@ -1,6 +1,19 @@
 -- AI Lead Booker System - Database Schema (SQLite version)
 
--- Core lead tracking with follow-up queue
+-- Users table for authentication and billing
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  google_id TEXT UNIQUE,
+  name TEXT,
+  photo TEXT,
+  access_token TEXT,
+  refresh_token TEXT,
+  has_paid INTEGER DEFAULT 0,
+  onboarding_completed INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS leads (
   id TEXT PRIMARY KEY, -- Using UUID strings
   email TEXT UNIQUE NOT NULL,
