@@ -103,6 +103,10 @@ async function main() {
     app.get('/health', (req, res) => {
         res.json({ status: 'healthy', timestamp: new Date() });
     });
+    // Explicit route for Google Site Verification
+    app.get('/googlec007ebb8e49ac379.html', (req, res) => {
+        res.sendFile(path_1.default.join(__dirname, '../public/googlec007ebb8e49ac379.html'));
+    });
     // Serve static frontend
     app.use(express_1.default.static(path_1.default.join(__dirname, '../public')));
     // Session Configuration

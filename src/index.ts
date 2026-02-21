@@ -111,6 +111,11 @@ async function main() {
         res.json({ status: 'healthy', timestamp: new Date() });
     });
 
+    // Explicit route for Google Site Verification
+    app.get('/googlec007ebb8e49ac379.html', (req, res) => {
+        res.sendFile(path.join(__dirname, '../public/googlec007ebb8e49ac379.html'));
+    });
+
     // Serve static frontend
     app.use(express.static(path.join(__dirname, '../public')));
 
