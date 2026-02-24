@@ -33,8 +33,17 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
         let userId = req.user?.id;
         if (!userId) {
             const firstUser = await db.query('SELECT id FROM users LIMIT 1');
-            if (firstUser.rows.length > 0) userId = firstUser.rows[0].id;
-            else return res.status(400).json({ error: 'No user found' });
+            if (firstUser.rows.length > 0) {
+                userId = firstUser.rows[0].id;
+            } else {
+                // Database holds no users, create a default admin user
+                const newId = 'usr_admin_' + Date.now();
+                await db.query(
+                    `INSERT INTO users (id, email, name, has_paid, onboarding_completed) VALUES ($1, 'admin@admin.com', 'Admin', 1, 1)`,
+                    [newId]
+                );
+                userId = newId;
+            }
         }
 
         const { appPassword } = req.body;
