@@ -7,14 +7,19 @@ const router = Router();
 // GET /api/settings/email-config
 router.get('/email-config', isAuthenticated, async (req: any, res) => {
     try {
-        const userId = req.user.id;
-        const result = await db.query('SELECT google_app_password FROM users WHERE id = $1', [userId]);
+        let userId = req.user?.id;
+        if (!userId) {
+            const firstUser = await db.query('SELECT id FROM users LIMIT 1');
+            if (firstUser.rows.length > 0) userId = firstUser.rows[0].id;
+            else return res.json({ configured: false, email: 'admin' });
+        }
 
+        const result = await db.query('SELECT google_app_password FROM users WHERE id = $1', [userId]);
         const hasPassword = result.rows.length > 0 && !!result.rows[0].google_app_password;
 
         res.json({
             configured: hasPassword,
-            email: req.user.email
+            email: req.user?.email || 'admin'
         });
     } catch (error) {
         console.error('Failed to fetch email config:', error);
@@ -25,7 +30,13 @@ router.get('/email-config', isAuthenticated, async (req: any, res) => {
 // POST /api/settings/email-config
 router.post('/email-config', isAuthenticated, async (req: any, res) => {
     try {
-        const userId = req.user.id;
+        let userId = req.user?.id;
+        if (!userId) {
+            const firstUser = await db.query('SELECT id FROM users LIMIT 1');
+            if (firstUser.rows.length > 0) userId = firstUser.rows[0].id;
+            else return res.status(400).json({ error: 'No user found' });
+        }
+
         const { appPassword } = req.body;
 
         if (!appPassword || typeof appPassword !== 'string') {
@@ -38,7 +49,7 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
             [appPassword.trim(), userId]
         );
 
-        console.log(`✅ App Password updated for user ${req.user.email}`);
+        console.log(`✅ App Password updated for user ${req.user?.email || 'admin'}`);
 
         res.json({ success: true, message: 'Email configuration saved successfully' });
     } catch (error) {
