@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   photo TEXT,
   access_token TEXT,
   refresh_token TEXT,
+  google_app_password TEXT,
   has_paid INTEGER DEFAULT 0,
   onboarding_completed INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),

@@ -28,6 +28,18 @@ try {
     } else {
         console.log("Database already initialized. Skipping setup.");
     }
+
+    // Migration Check: Ensure users table has google_app_password
+    console.log("Running migration checks...");
+    if (hasUsersTable) {
+        const usersCols = db.prepare("PRAGMA table_info(users)").all();
+        const hasAppPassword = usersCols.some(c => c.name === 'google_app_password');
+        if (!hasAppPassword) {
+            console.log("Adding google_app_password column to users table...");
+            db.prepare("ALTER TABLE users ADD COLUMN google_app_password TEXT").run();
+            console.log("Migration complete.");
+        }
+    }
 } catch (error) {
     console.error("Error setting up database:", error);
     process.exit(1);
