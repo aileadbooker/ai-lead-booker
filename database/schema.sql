@@ -178,3 +178,15 @@ CREATE TABLE IF NOT EXISTS action_log (
 CREATE INDEX IF NOT EXISTS idx_action_log_lead ON action_log(lead_id);
 CREATE INDEX IF NOT EXISTS idx_action_log_type ON action_log(action_type);
 CREATE INDEX IF NOT EXISTS idx_action_log_created ON action_log(created_at);
+
+-- Custom Pitch configuration
+CREATE TABLE IF NOT EXISTS custom_pitch (
+  id TEXT PRIMARY KEY,
+  initial_pitch TEXT NOT NULL,
+  yes_response TEXT NOT NULL,
+  no_response TEXT NOT NULL,
+  yes_2_response TEXT,
+  no_2_response TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);

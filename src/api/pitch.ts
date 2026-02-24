@@ -79,12 +79,13 @@ router.put('/pitch', async (req: Request, res: Response) => {
         }
 
         await db.query(
-            `UPDATE custom_pitch 
-             SET initial_pitch = $1,
-                 yes_response = $2,
-                 no_response = $3,
-                 updated_at = datetime('now')
-             WHERE id = 'default'`,
+            `INSERT INTO custom_pitch (id, initial_pitch, yes_response, no_response, updated_at)
+             VALUES ('default', $1, $2, $3, datetime('now'))
+             ON CONFLICT(id) DO UPDATE SET
+                 initial_pitch = excluded.initial_pitch,
+                 yes_response = excluded.yes_response,
+                 no_response = excluded.no_response,
+                 updated_at = excluded.updated_at`,
             [initial_pitch, yes_response, no_response]
         );
 
@@ -104,14 +105,15 @@ router.post('/pitch/reset', async (req: Request, res: Response) => {
         console.log('[DEBUG] POST /api/pitch/reset triggered');
 
         await db.query(
-            `UPDATE custom_pitch 
-             SET initial_pitch = $1,
-                 yes_response = $2,
-                 no_response = $3,
-                 yes_2_response = $4,
-                 no_2_response = $5,
-                 updated_at = datetime('now')
-             WHERE id = 'default'`,
+            `INSERT INTO custom_pitch (id, initial_pitch, yes_response, no_response, yes_2_response, no_2_response, updated_at)
+             VALUES ('default', $1, $2, $3, $4, $5, datetime('now'))
+             ON CONFLICT(id) DO UPDATE SET
+                 initial_pitch = excluded.initial_pitch,
+                 yes_response = excluded.yes_response,
+                 no_response = excluded.no_response,
+                 yes_2_response = excluded.yes_2_response,
+                 no_2_response = excluded.no_2_response,
+                 updated_at = excluded.updated_at`,
             [DEFAULT_PITCH.initial_pitch, DEFAULT_PITCH.yes_response, DEFAULT_PITCH.no_response,
             DEFAULT_PITCH.yes_2_response, DEFAULT_PITCH.no_2_response]
         );

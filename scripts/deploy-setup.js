@@ -40,6 +40,25 @@ try {
             console.log("Migration complete.");
         }
     }
+
+    // Migration Check: Ensure custom_pitch table exists
+    const hasCustomPitchTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='custom_pitch'").get();
+    if (!hasCustomPitchTable) {
+        console.log("Adding custom_pitch table...");
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS custom_pitch (
+              id TEXT PRIMARY KEY,
+              initial_pitch TEXT NOT NULL,
+              yes_response TEXT NOT NULL,
+              no_response TEXT NOT NULL,
+              yes_2_response TEXT,
+              no_2_response TEXT,
+              created_at TEXT DEFAULT (datetime('now')),
+              updated_at TEXT DEFAULT (datetime('now'))
+            );
+        `);
+        console.log("custom_pitch table created.");
+    }
 } catch (error) {
     console.error("Error setting up database:", error);
     process.exit(1);
