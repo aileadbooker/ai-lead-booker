@@ -55,13 +55,14 @@ export class WebScraper {
             try {
                 const email = await this.extractEmailFromSite(url);
                 if (email) {
+                    const cleanName = this.extractCleanName(url, result.title);
                     leads.push({
-                        company: result.title,
+                        company: cleanName,
                         url: url,
                         email: email,
                         source: 'web_scrape'
                     });
-                    console.log(`✅ Found lead: ${email} (${url})`);
+                    console.log(`✅ Found lead: ${email} (${url}) -> Name: ${cleanName}`);
                 }
             } catch (error) {
                 // Ignore
@@ -73,6 +74,31 @@ export class WebScraper {
     private isBlacklisted(url: string): boolean {
         const blacklist = ['yelp.com', 'facebook.com', 'linkedin.com', 'yellowpages.com', 'instagram.com', 'twitter.com', 'youtube.com', 'google.com', 'yahoo.com', 'bing.com'];
         return blacklist.some(domain => url.includes(domain));
+    }
+
+    /**
+     * Extracts a clean, human-readable name from the URL or title.
+     */
+    private extractCleanName(url: string, rawTitle: string): string {
+        try {
+            // Trim standard delimiters
+            let name = rawTitle.split(' | ')[0].split(' - ')[0].trim();
+
+            // If the name still contains URLs, weird characters, or is too long, fallback to the Domain
+            if (name.includes('http') || name.includes('www.') || name.includes('>') || name.length > 40) {
+                const domainObj = new URL(url);
+                let hostname = domainObj.hostname.replace('www.', '');
+                const parts = hostname.split('.');
+                parts.pop(); // remove tld
+                name = parts.join(' ');
+            }
+
+            // Capitalize First letters
+            const clean = name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').trim();
+            return clean ? clean : "Friend";
+        } catch {
+            return "Friend";
+        }
     }
 
     /**
