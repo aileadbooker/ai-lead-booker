@@ -34,7 +34,7 @@ router.post('/start', async (req, res) => {
  * Stop the current campaign
  */
 router.post('/stop', async (req, res) => {
-    campaign_runner_1.default.stop();
+    await campaign_runner_1.default.stop();
     res.json({
         success: true,
         message: 'Campaign stopped',

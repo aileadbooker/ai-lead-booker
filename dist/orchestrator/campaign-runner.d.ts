@@ -13,13 +13,17 @@ declare class CampaignRunner {
     private lastRunDate;
     constructor();
     /**
+     * Initialize campaign runner from DB state
+     */
+    init(): Promise<void>;
+    /**
      * Start the campaign
      */
     start(niche: string, dailyLimit: number): Promise<void>;
     /**
      * Stop/Pause the campaign
      */
-    stop(): void;
+    stop(): Promise<void>;
     /**
      * Get current stats
      */
@@ -31,6 +35,7 @@ declare class CampaignRunner {
         niche: string;
         sentToday: number;
         dailyLimit: number;
+        active: boolean;
     }>;
     private isProcessingQueue;
     /**

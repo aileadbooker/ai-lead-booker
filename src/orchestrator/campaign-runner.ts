@@ -178,7 +178,11 @@ class CampaignRunner {
 
         try {
             // 1. Check daily limit
-            const today = new Date().toISOString().split('T')[0];
+            // BUGFIX: Use toLocaleDateString('en-CA') to get local YYYY-MM-DD instead of UTC
+            const today = new Date().toLocaleDateString('en-CA', {
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            });
+
             if (this.lastRunDate !== today) {
                 this.sentToday = 0; // Reset for new day
                 this.lastRunDate = today;

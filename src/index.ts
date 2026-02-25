@@ -6,6 +6,7 @@ import emailService from './ingestion/email-service';
 import leadProcessor from './orchestrator/lead-processor';
 import followupScheduler from './orchestrator/scheduler';
 import dailyReporter from './orchestrator/daily-reporter';
+import campaignRunner from './orchestrator/campaign-runner';
 import analyticsRoutes from './api/analytics';
 import pitchRoutes from './api/pitch';
 import authRoutes from './api/auth';
@@ -272,6 +273,9 @@ async function main() {
     // 4. Start email monitoring
     const emailMonitor = new EmailMonitor();
     emailMonitor.start(60000); // Poll every 60 seconds
+
+    // Initialize campaign runner (resumes if active in DB)
+    await campaignRunner.init();
 
     // 5. Start follow-up scheduler
     followupScheduler.start(60000); // Check for follow-ups every 60 seconds

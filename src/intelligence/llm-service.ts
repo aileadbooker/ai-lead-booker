@@ -85,7 +85,7 @@ Task: Generate the next move and email draft.`;
             }
 
             const completion = await this.openai.chat.completions.create({
-                model: 'gpt-4-turbo-preview',
+                model: 'gpt-4o-mini',
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userPrompt }
@@ -270,7 +270,7 @@ Output strictly valid JSON array. No markdown, no explanations.`;
             }
 
             const completion = await this.openai.chat.completions.create({
-                model: 'gpt-4-turbo-preview',
+                model: 'gpt-4o-mini',
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: `Find ${count} leads for ${niche}` }

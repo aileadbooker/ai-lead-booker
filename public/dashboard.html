@@ -397,11 +397,18 @@
                     To enable <strong>Real-Time Reply Detection</strong>, you must connect your Gmail using an App
                     Password.
                 </p>
+
+                <div style="margin-bottom: 1rem;">
+                    <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Google Account Email</label>
+                    <input type="email" id="google-email" placeholder="example@gmail.com"
+                        style="width: 100%; padding: 0.75rem 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary);">
+                </div>
+
                 <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Google App Password</label>
                 <div style="display: flex; gap: 1rem;">
-                    <input type="password" id="app-password" placeholder="xxxx xxxx xxxx xxxx"
+                    <input type="password" id="app-password" placeholder="xxxxxxxxxxxxxxxx"
                         style="flex: 1; padding: 0.75rem 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary);">
-                    <button class="btn" onclick="saveEmailConfig()">Save</button>
+                    <button class="btn" onclick="saveEmailConfig()">Connect</button>
                 </div>
             </div>
             <div style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px;">

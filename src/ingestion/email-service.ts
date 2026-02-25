@@ -231,17 +231,20 @@ export class EmailService {
     private async getTransporter(): Promise<nodemailer.Transporter | null> {
         // 1. Try to find a user with Google tokens OR App Password
         try {
-            const res = await db.query('SELECT email, access_token, refresh_token, google_id, google_app_password FROM users LIMIT 1');
+            const res = await db.query('SELECT email, access_token, refresh_token, google_id, google_app_password, google_account_email FROM users LIMIT 1');
             if (res.rows.length > 0) {
                 const user = res.rows[0];
 
                 // A. Try App Password (Preferred for IMAP/SMTP simplicity)
+                // We use google_account_email if explicitly provided, otherwise fallback to their login email
                 if (user.google_app_password) {
-                    console.log(`Using App Password for ${user.email}`);
+                    const senderEmail = user.google_account_email || user.email;
+                    console.log(`Using App Password for sender: ${senderEmail}`);
+
                     return nodemailer.createTransport({
                         service: 'gmail',
                         auth: {
-                            user: user.email,
+                            user: senderEmail,
                             pass: user.google_app_password,
                         },
                     });
@@ -309,8 +312,13 @@ export class EmailService {
                 return { sent: false, reason: 'No email transport configured' };
             }
 
+            // Retrieve Sender config dynamically to ensure 'From:' matches the connected account
+            const res = await db.query('SELECT email, google_account_email FROM users LIMIT 1');
+            const user = res.rows[0] || {};
+            const senderEmail = user.google_account_email || config.gmailUserEmail || config.smtp.user;
+
             const mailOptions: nodemailer.SendMailOptions = {
-                from: `"${config.businessName}" <${config.gmailUserEmail || config.smtp.user}>`, // OAuth will override 'user' if present
+                from: `"${config.businessName}" <${senderEmail}>`,
                 to: lead.email,
                 subject: subject,
                 html: body,

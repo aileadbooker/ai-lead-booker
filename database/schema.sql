@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   access_token TEXT,
   refresh_token TEXT,
   google_app_password TEXT,
+  google_account_email TEXT,
   has_paid INTEGER DEFAULT 0,
   onboarding_completed INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
@@ -188,5 +189,14 @@ CREATE TABLE IF NOT EXISTS custom_pitch (
   yes_2_response TEXT,
   no_2_response TEXT,
   created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Campaign Configuration
+CREATE TABLE IF NOT EXISTS campaign_config (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'running')),
+  current_niche TEXT,
+  daily_limit INTEGER DEFAULT 50,
   updated_at TEXT DEFAULT (datetime('now'))
 );

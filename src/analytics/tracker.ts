@@ -96,12 +96,12 @@ export class AnalyticsTracker {
 
         const events = await db.query(
             `SELECT 
-                DATE(created_at) as date,
+                DATE(created_at, 'localtime') as date,
                 event_type,
                 COUNT(*) as count
              FROM analytics_events
              WHERE created_at >= $1
-             GROUP BY DATE(created_at), event_type
+             GROUP BY DATE(created_at, 'localtime'), event_type
              ORDER BY date ASC`,
             [startDate]
         );

@@ -602,21 +602,31 @@ async function loadEmailConfig() {
 async function saveEmailConfig() {
     const btn = document.querySelector('button[onclick="saveEmailConfig()"]');
     const originalText = btn.innerText;
+
+    // Explicitly pair the App Password with the EXACT Google email
+    const email = document.getElementById('google-email').value;
     const password = document.getElementById('app-password').value;
 
+    if (!email || !email.includes('@')) {
+        alert('Please enter your Google Account Email');
+        return;
+    }
     if (!password) {
-        alert('Please enter an App Password');
+        alert('Please enter your 16-letter App Password');
         return;
     }
 
     try {
-        btn.innerText = 'Saving...';
+        btn.innerText = 'Connecting...';
         btn.disabled = true;
 
         const res = await fetch('/api/settings/email-config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ appPassword: password })
+            body: JSON.stringify({
+                googleEmail: email.trim(),
+                appPassword: password.replace(/\s+/g, '') // Strip spaces automatically
+            })
         });
 
         const data = await res.json();

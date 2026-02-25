@@ -51,38 +51,41 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
             }
         }
 
-        const { appPassword } = req.body;
+        const { appPassword, googleEmail } = req.body;
 
         if (!appPassword || typeof appPassword !== 'string') {
             return res.status(400).json({ error: 'App Password is required' });
         }
+        if (!googleEmail || typeof googleEmail !== 'string' || !googleEmail.includes('@')) {
+            return res.status(400).json({ error: 'Valid Google Email is required' });
+        }
 
         // VERIFICATION: Actually test the Google App Password BEFORE saving
-        console.log(`Verifying Google App Password for ${userEmail}...`);
+        console.log(`Verifying Google App Password for explicit email account: ${googleEmail}...`);
         try {
             const testTransporter = nodemailer.createTransport({
                 service: 'gmail',
                 auth: {
-                    user: userEmail,
+                    user: googleEmail.trim(), // Use the explicitly provided address!
                     pass: appPassword.trim(),
                 },
             });
             await testTransporter.verify();
-            console.log(`✅ App Password successfully authenticated with Google.`);
+            console.log(`✅ App Password successfully authenticated for ${googleEmail}.`);
         } catch (authError: any) {
             console.error(`❌ Authentication failed:`, authError.message);
             return res.status(401).json({
-                error: 'Authentication failed. Please check that you enabled 2FA and generated a fresh 16-letter App Password without spaces. Read the setup guide if you are stuck.'
+                error: 'Authentication failed. Google rejected this password. Make sure you typed the exact Google Account Email this password was generated under.'
             });
         }
 
         // Save to DB
         await db.query(
-            `UPDATE users SET google_app_password = $1, updated_at = datetime('now') WHERE id = $2`,
-            [appPassword.trim(), userId]
+            `UPDATE users SET google_app_password = $1, google_account_email = $2, updated_at = datetime('now') WHERE id = $3`,
+            [appPassword.trim(), googleEmail.trim(), userId]
         );
 
-        console.log(`✅ App Password updated for user ${userEmail}`);
+        console.log(`✅ App Password configured and securely bound to ${googleEmail}`);
 
         res.json({ success: true, message: 'Email configuration saved successfully' });
     } catch (error) {

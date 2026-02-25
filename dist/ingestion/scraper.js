@@ -42,6 +42,7 @@ const cheerio = __importStar(require("cheerio"));
 /**
  * Robust Web Scraper 🕵️‍♂️
  * Rotates User-Agents and tries multiple search engines.
+ * Feature Update: Deep-Crawling and Search Pagination for 10x Volume.
  */
 class WebScraper {
     constructor() {
@@ -55,22 +56,22 @@ class WebScraper {
     /**
      * Search for leads
      */
-    async findLeads(niche, maxResults = 5) {
-        console.log(`🔎 Scraping for: "${niche}"...`);
+    async findLeads(niche, maxResults = 5, page = 1) {
+        console.log(`🔎 Scraping for: "${niche}" (Page ${page})...`);
         let results = [];
         // 1. Try Yahoo (Often easier to scrape)
         try {
-            console.log('Trying Yahoo Search...');
-            results = await this.searchYahoo(niche, maxResults * 2);
+            console.log(`Trying Yahoo Search (Page ${page})...`);
+            results = await this.searchYahoo(niche, maxResults * 2, page);
         }
         catch (e) {
             console.error('Yahoo failed', e);
         }
         // 2. Fallback to Google if Yahoo fails
         if (results.length === 0) {
-            console.log('⚠️ Yahoo returned 0 results. Trying Google...');
+            console.log(`⚠️ Yahoo returned 0 results. Trying Google (Page ${page})...`);
             try {
-                results = await this.searchGoogle(niche, maxResults * 2);
+                results = await this.searchGoogle(niche, maxResults * 2, page);
             }
             catch (e) {
                 console.error('Google failed', e);
@@ -78,63 +79,89 @@ class WebScraper {
         }
         // 3. Fallback to Bing
         if (results.length === 0) {
-            console.log('⚠️ Google returned 0 results. Trying Bing...');
+            console.log(`⚠️ Google returned 0 results. Trying Bing (Page ${page})...`);
             try {
-                results = await this.searchBing(niche, maxResults * 2);
+                results = await this.searchBing(niche, maxResults * 2, page);
             }
             catch (e) {
                 console.error('Bing failed', e);
             }
         }
         const leads = [];
-        console.log(`Found ${results.length} potential websites. Scanning for emails...`);
-        for (const result of results) {
-            if (leads.length >= maxResults)
-                break;
-            const url = result.url;
-            if (this.isBlacklisted(url))
-                continue;
-            try {
-                const email = await this.extractEmailFromSite(url);
-                if (email) {
-                    leads.push({
-                        company: result.title,
-                        url: url,
-                        email: email,
-                        source: 'web_scrape'
-                    });
-                    console.log(`✅ Found lead: ${email} (${url})`);
+        console.log(`Found ${results.length} potential websites on page ${page}. Deep-scanning for emails...`);
+        // Pool requests for speed while scraping actual websites
+        const MAX_CONCURRENT = 3;
+        for (let i = 0; i < results.length; i += MAX_CONCURRENT) {
+            const batch = results.slice(i, i + MAX_CONCURRENT);
+            const batchPromises = batch.map(async (result) => {
+                const url = result.url;
+                if (this.isBlacklisted(url))
+                    return null;
+                try {
+                    const email = await this.deepExtractEmail(url);
+                    if (email) {
+                        const cleanName = this.extractCleanName(url, result.title);
+                        console.log(`✅ Found lead: ${email} (${url}) -> Name: ${cleanName}`);
+                        return {
+                            company: cleanName,
+                            url: url,
+                            email: email,
+                            source: 'web_scrape'
+                        };
+                    }
+                }
+                catch (error) {
+                    // Ignore page fetch errors easily
+                }
+                return null;
+            });
+            const resolvedBatch = await Promise.all(batchPromises);
+            for (const lead of resolvedBatch) {
+                if (lead && leads.length < maxResults) {
+                    leads.push(lead);
                 }
             }
-            catch (error) {
-                // Ignore
-            }
+            if (leads.length >= maxResults)
+                break;
         }
         return leads;
     }
     isBlacklisted(url) {
-        const blacklist = ['yelp.com', 'facebook.com', 'linkedin.com', 'yellowpages.com', 'instagram.com', 'twitter.com', 'youtube.com', 'google.com', 'yahoo.com', 'bing.com'];
+        // Significantly expanded blacklist to filter out directories and focus on small business owners' actual core websites.
+        const blacklist = ['yelp.com', 'facebook.com', 'linkedin.com', 'yellowpages.com', 'instagram.com', 'twitter.com', 'youtube.com', 'google.com', 'yahoo.com', 'bing.com', 'bbb.org', 'houzz.com', 'angi.com', 'thumbtack.com', 'homeadvisor.com', 'porch.com', 'expertise.com', 'mapquest.com', 'superpages.com', 'yellowbook.com', 'manta.com', 'chamberofcommerce.com'];
         return blacklist.some(domain => url.includes(domain));
     }
-    /**
-     * Scrape Yahoo
-     */
-    async searchYahoo(query, limit) {
+    extractCleanName(url, rawTitle) {
+        try {
+            let name = rawTitle.split(' | ')[0].split(' - ')[0].trim();
+            if (name.includes('http') || name.includes('www.') || name.includes('>') || name.length > 40) {
+                const domainObj = new URL(url);
+                let hostname = domainObj.hostname.replace('www.', '');
+                const parts = hostname.split('.');
+                parts.pop(); // remove tld
+                name = parts.join(' ');
+            }
+            const clean = name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').trim();
+            return clean ? clean : "Friend";
+        }
+        catch {
+            return "Friend";
+        }
+    }
+    async searchYahoo(query, limit, page) {
         try {
             const ua = this.USER_AGENTS[Math.floor(Math.random() * this.USER_AGENTS.length)];
-            const response = await axios_1.default.get(`https://search.yahoo.com/search?p=${encodeURIComponent(query)}&n=${limit + 5}`, {
+            const b = (page - 1) * 10 + 1;
+            const response = await axios_1.default.get(`https://search.yahoo.com/search?p=${encodeURIComponent(query)}&n=${limit + 5}&b=${b}`, {
                 headers: { 'User-Agent': ua }
             });
             const $ = cheerio.load(response.data);
             const results = [];
-            // Yahoo selectors (often 'div.algo' or 'h3.title > a')
             $('h3.title a').each((i, element) => {
                 const title = $(element).text();
                 let url = $(element).attr('href');
-                // Decode Yahoo redirect URLs if needed (often direct, sometimes wrapped)
                 if (url && url.includes('RU=')) {
                     try {
-                        // Extract RU param
                         const match = url.match(/RU=([^/]+)/);
                         if (match && match[1])
                             url = decodeURIComponent(match[1]);
@@ -151,13 +178,11 @@ class WebScraper {
             return [];
         }
     }
-    /**
-     * Scrape Google
-     */
-    async searchGoogle(query, limit) {
+    async searchGoogle(query, limit, page) {
         try {
             const ua = this.USER_AGENTS[Math.floor(Math.random() * this.USER_AGENTS.length)];
-            const response = await axios_1.default.get(`https://www.google.com/search?q=${encodeURIComponent(query)}&num=${limit + 5}`, {
+            const start = (page - 1) * 10;
+            const response = await axios_1.default.get(`https://www.google.com/search?q=${encodeURIComponent(query)}&num=${limit + 5}&start=${start}`, {
                 headers: {
                     'User-Agent': ua,
                     'Accept-Language': 'en-US,en;q=0.9',
@@ -166,7 +191,6 @@ class WebScraper {
             });
             const $ = cheerio.load(response.data);
             const results = [];
-            // Targeted selectors for Google
             $('div.g').each((i, element) => {
                 const title = $(element).find('h3').first().text();
                 const url = $(element).find('a').first().attr('href');
@@ -180,13 +204,11 @@ class WebScraper {
             return [];
         }
     }
-    /**
-     * Scrape Bing
-     */
-    async searchBing(query, limit) {
+    async searchBing(query, limit, page) {
         try {
             const ua = this.USER_AGENTS[Math.floor(Math.random() * this.USER_AGENTS.length)];
-            const response = await axios_1.default.get(`https://www.bing.com/search?q=${encodeURIComponent(query)}&count=${limit + 5}`, {
+            const first = (page - 1) * 10 + 1;
+            const response = await axios_1.default.get(`https://www.bing.com/search?q=${encodeURIComponent(query)}&count=${limit + 5}&first=${first}`, {
                 headers: {
                     'User-Agent': ua,
                     'Accept-Language': 'en-US,en;q=0.9',
@@ -208,11 +230,28 @@ class WebScraper {
             return [];
         }
     }
-    async extractEmailFromSite(url) {
+    /**
+     * Deep crawl: Check homepage first, then navigate into subpages like a human researcher.
+     */
+    async deepExtractEmail(baseUrl) {
+        let email = await this.fetchAndExtractEmail(baseUrl);
+        if (email)
+            return email;
+        const base = baseUrl.replace(/\/$/, '');
+        const subpages = ['/contact', '/contact-us', '/about', '/about-us'];
+        for (const sub of subpages) {
+            console.log(`   └─ Deep Crawling Subpage: ${base}${sub}`);
+            email = await this.fetchAndExtractEmail(`${base}${sub}`);
+            if (email)
+                return email;
+        }
+        return null;
+    }
+    async fetchAndExtractEmail(url) {
         try {
             const ua = this.USER_AGENTS[Math.floor(Math.random() * this.USER_AGENTS.length)];
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout
+            const timeout = setTimeout(() => controller.abort(), 6000); // 6s timeout per page
             const response = await axios_1.default.get(url, {
                 headers: { 'User-Agent': ua },
                 signal: controller.signal
@@ -221,36 +260,24 @@ class WebScraper {
             const html = response.data;
             if (typeof html !== 'string')
                 return null;
-            // Robust Email Regex (Strict)
-            // - Must have at least 2 chars before @
-            // - Domain must have at least one dot
-            // - TLD must be 2+ chars
             const emailRegex = /([a-zA-Z0-9._-]{2,}@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,})/gi;
             const matches = html.match(emailRegex);
             if (matches) {
                 const uniqueEmails = [...new Set(matches.map(e => e.toLowerCase()))];
                 const validEmails = uniqueEmails.filter(email => {
-                    // 1. Filter out common junk/placeholders
-                    if (email.includes('sentry') ||
-                        email.includes('example') ||
-                        email.includes('wixpress') ||
-                        email.includes('domain.com') ||
-                        email.includes('email.com') ||
-                        email.includes('godaddy') ||
-                        email.includes('name@') ||
-                        email.includes('user@') ||
-                        email.includes('admin@') && !email.includes('info'))
+                    if (email.includes('sentry') || email.includes('example') || email.includes('wixpress') ||
+                        email.includes('domain.com') || email.includes('email.com') || email.includes('godaddy') ||
+                        email.includes('cloudflare') || email.includes('sitelink') || email.includes('email-protection') ||
+                        email.includes('name@') || email.includes('user@') ||
+                        (email.includes('admin@') && !email.includes('info')))
                         return false;
-                    // 2. Filter out image/code false positives
                     if (email.match(/\.(png|jpg|jpeg|gif|svg|css|js|webp|woff|woff2|ttf|eot)$/))
                         return false;
-                    // 3. Length checks
                     if (email.length > 60 || email.length < 6)
                         return false;
                     return true;
                 });
                 if (validEmails.length > 0) {
-                    // Prioritize specific roles
                     const priority = validEmails.find(e => e.startsWith('info') || e.startsWith('contact') || e.startsWith('hello') || e.startsWith('sales'));
                     return priority || validEmails[0];
                 }

@@ -1,32 +1,29 @@
 /**
  * Robust Web Scraper 🕵️‍♂️
  * Rotates User-Agents and tries multiple search engines.
+ * Feature Update: Deep-Crawling and Search Pagination for 10x Volume.
  */
 export declare class WebScraper {
     private readonly USER_AGENTS;
     /**
      * Search for leads
      */
-    findLeads(niche: string, maxResults?: number): Promise<Array<{
+    findLeads(niche: string, maxResults?: number, page?: number): Promise<Array<{
         company: string;
         url: string;
         email?: string;
         source: string;
     }>>;
     private isBlacklisted;
-    /**
-     * Scrape Yahoo
-     */
+    private extractCleanName;
     private searchYahoo;
-    /**
-     * Scrape Google
-     */
     private searchGoogle;
-    /**
-     * Scrape Bing
-     */
     private searchBing;
-    private extractEmailFromSite;
+    /**
+     * Deep crawl: Check homepage first, then navigate into subpages like a human researcher.
+     */
+    private deepExtractEmail;
+    private fetchAndExtractEmail;
 }
 declare const _default: WebScraper;
 export default _default;

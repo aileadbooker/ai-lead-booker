@@ -1,18 +1,14 @@
 import { Lead } from '../types';
 /**
- * Mock Lead Generator
- * Simulates scraping leads from external sources
+ * Robust Lead Generator Orchestrator
+ * Maps search niches to real Google pagination states and aggressively fetches until quotas are hit.
  */
 export declare class LeadGenerator {
+    private nichePages;
     /**
      * Generate leads based on a niche
      * @param niche Target industry/niche (e.g. "Gym Owners")
-     * @param count Number of leads to generate
-     */
-    /**
-     * Generate leads based on a niche
-     * @param niche Target industry/niche (e.g. "Gym Owners")
-     * @param count Number of leads to generate
+     * @param count Number of valid, non-duplicate leads to generate
      */
     generateLeads(niche: string, count?: number): Promise<Lead[]>;
 }

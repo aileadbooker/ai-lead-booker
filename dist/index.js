@@ -11,6 +11,7 @@ const email_service_1 = __importDefault(require("./ingestion/email-service"));
 const lead_processor_1 = __importDefault(require("./orchestrator/lead-processor"));
 const scheduler_1 = __importDefault(require("./orchestrator/scheduler"));
 const daily_reporter_1 = __importDefault(require("./orchestrator/daily-reporter"));
+const campaign_runner_1 = __importDefault(require("./orchestrator/campaign-runner"));
 const analytics_1 = __importDefault(require("./api/analytics"));
 const pitch_1 = __importDefault(require("./api/pitch"));
 const auth_1 = __importDefault(require("./api/auth"));
@@ -235,6 +236,8 @@ async function main() {
     // 4. Start email monitoring
     const emailMonitor = new EmailMonitor();
     emailMonitor.start(60000); // Poll every 60 seconds
+    // Initialize campaign runner (resumes if active in DB)
+    await campaign_runner_1.default.init();
     // 5. Start follow-up scheduler
     scheduler_1.default.start(60000); // Check for follow-ups every 60 seconds
     // 6. Graceful shutdown
