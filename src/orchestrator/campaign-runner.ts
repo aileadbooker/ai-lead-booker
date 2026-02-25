@@ -25,6 +25,47 @@ class CampaignRunner {
     }
 
     /**
+     * Initialize campaign runner from DB state
+     */
+    async init() {
+        console.log('🔄 Initializing Campaign Runner from database...');
+        try {
+            // Get or create campaign config
+            let configResult = await db.query(`SELECT * FROM campaign_config WHERE id = 'default'`);
+
+            if (configResult.rows.length === 0) {
+                await db.query(
+                    `INSERT INTO campaign_config (id, status, current_niche, daily_limit) VALUES ('default', 'idle', '', 50)`
+                );
+            } else {
+                const config = configResult.rows[0];
+                this.status = config.status as any;
+                this.currentNiche = config.current_niche || '';
+                this.dailyLimit = config.daily_limit || 50;
+
+                if (this.status === 'running' && this.currentNiche) {
+                    console.log(`▶️ Resuming active campaign for "${this.currentNiche}"...`);
+
+                    // Reset daily count if it's a new day
+                    const today = new Date().toISOString().split('T')[0];
+                    if (this.lastRunDate !== today) {
+                        this.sentToday = 0;
+                        this.lastRunDate = today;
+                    }
+
+                    // Start processing loop
+                    this.processQueue();
+                    if (!this.intervalId) {
+                        this.intervalId = setInterval(() => this.processQueue(), 60000);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to initialize Campaign Runner:', error);
+        }
+    }
+
+    /**
      * Start the campaign
      */
     async start(niche: string, dailyLimit: number) {
@@ -35,6 +76,14 @@ class CampaignRunner {
         this.status = 'running';
         this.currentNiche = niche;
         this.dailyLimit = dailyLimit;
+
+        // Save to DB
+        await db.query(
+            `UPDATE campaign_config 
+             SET status = 'running', current_niche = $1, daily_limit = $2, updated_at = datetime('now')
+             WHERE id = 'default'`,
+            [niche, dailyLimit]
+        );
 
         // Reset daily count if it's a new day
         const today = new Date().toISOString().split('T')[0];
@@ -62,9 +111,17 @@ class CampaignRunner {
     /**
      * Stop/Pause the campaign
      */
-    stop() {
+    async stop() {
         console.log('🛑 Stopping campaign');
         this.status = 'idle'; // effectively "stopped" for MVP, 'paused' could keep state
+
+        // Save to DB
+        await db.query(
+            `UPDATE campaign_config 
+             SET status = 'idle', updated_at = datetime('now')
+             WHERE id = 'default'`
+        );
+
         if (this.intervalId) {
             clearInterval(this.intervalId);
             this.intervalId = null;
@@ -78,6 +135,15 @@ class CampaignRunner {
      * Get current stats
      */
     async getStats() {
+        // Read config from DB to ensure sync
+        const configResult = await db.query(`SELECT status, current_niche, daily_limit FROM campaign_config WHERE id = 'default'`);
+        if (configResult.rows.length > 0) {
+            const config = configResult.rows[0];
+            this.status = config.status as any;
+            this.currentNiche = config.current_niche || '';
+            this.dailyLimit = config.daily_limit || 50;
+        }
+
         // Always fetch truth from DB to avoid memory drift
         const countResult = await db.query(
             `SELECT COUNT(*) as count FROM messages 
@@ -90,7 +156,8 @@ class CampaignRunner {
             status: this.status,
             niche: this.currentNiche,
             sentToday: this.sentToday,
-            dailyLimit: this.dailyLimit
+            dailyLimit: this.dailyLimit,
+            active: this.status === 'running'
         };
     }
 
@@ -133,9 +200,13 @@ class CampaignRunner {
             );
 
             // 3. If no leads, generate more!
-            if (leadsToContact.rows.length === 0) {
-                console.log('📉 No new leads in queue. Generating fresh leads...');
-                const newLeads = await leadGenerator.generateLeads(this.currentNiche, 20); // Generate batch of 20 - Reduced from 20 to avoid long blocks? No 20 is fine.
+            const remainingForToday = this.dailyLimit - this.sentToday;
+            if (leadsToContact.rows.length === 0 && remainingForToday > 0) {
+                console.log(`📉 No new leads in queue. Generating fresh leads to satisfy remaining daily target (${remainingForToday} needed)...`);
+
+                // Aggressively fetch a chunk of leads to keep the pipeline moving rapidly
+                const fetchCount = Math.min(25, remainingForToday);
+                const newLeads = await leadGenerator.generateLeads(this.currentNiche, fetchCount);
 
                 if (newLeads.length === 0) {
                     console.log('⚠️ Could not generate leads. Retrying later.');
