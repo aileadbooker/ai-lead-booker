@@ -69,6 +69,9 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
                     user: googleEmail.trim(), // Use the explicitly provided address!
                     pass: appPassword.trim(),
                 },
+                connectionTimeout: 10000, // 10 seconds max connection wait
+                greetingTimeout: 10000,
+                socketTimeout: 10000,
             });
             await testTransporter.verify();
             console.log(`✅ App Password successfully authenticated for ${googleEmail}.`);
