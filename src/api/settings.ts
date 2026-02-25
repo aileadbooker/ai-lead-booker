@@ -75,7 +75,7 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
         } catch (authError: any) {
             console.error(`❌ Authentication failed:`, authError.message);
             return res.status(401).json({
-                error: 'Authentication failed. Google rejected this password. Make sure you typed the exact Google Account Email this password was generated under.'
+                error: `Authentication failed. Google said: "${authError.message}". Make sure you typed the exact Google Account Email this password was generated under, and that you do not have any invisible characters copied. You may also need to visit https://accounts.google.com/DisplayUnlockCaptcha from your browser to allow the connection.`
             });
         }
 
