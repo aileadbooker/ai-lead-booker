@@ -59,6 +59,22 @@ try {
         `);
         console.log("custom_pitch table created.");
     }
+
+    // Migration Check: Ensure campaign_config table exists
+    const hasCampaignConfigTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='campaign_config'").get();
+    if (!hasCampaignConfigTable) {
+        console.log("Adding campaign_config table...");
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS campaign_config (
+              id TEXT PRIMARY KEY,
+              status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'running')),
+              current_niche TEXT,
+              daily_limit INTEGER DEFAULT 50,
+              updated_at TEXT DEFAULT (datetime('now'))
+            );
+        `);
+        console.log("campaign_config table created.");
+    }
 } catch (error) {
     console.error("Error setting up database:", error);
     process.exit(1);
