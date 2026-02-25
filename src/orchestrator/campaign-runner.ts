@@ -284,6 +284,12 @@ class CampaignRunner {
 
                 if (!result.sent) {
                     console.error(`Failed to send email to ${lead.email}: ${result.reason}`);
+
+                    // NEW: Explicitly mark as failed so the UI doesn't display incorrect state
+                    await db.query(
+                        `UPDATE leads SET status = 'failed' WHERE id = $1`,
+                        [lead.id]
+                    );
                     return false;
                 }
 
