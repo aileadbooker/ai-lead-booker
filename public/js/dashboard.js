@@ -619,7 +619,11 @@ async function saveEmailConfig() {
             body: JSON.stringify({ appPassword: password })
         });
 
-        if (!res.ok) throw new Error('Failed to save');
+        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to save');
+        }
 
         document.getElementById('app-password').value = '';
         updateEmailConfigUI(true);
@@ -627,7 +631,7 @@ async function saveEmailConfig() {
 
     } catch (error) {
         console.error(error);
-        alert('❌ Failed to save email config');
+        alert(`❌ ${error.message}`);
     } finally {
         btn.innerText = originalText;
         btn.disabled = false;

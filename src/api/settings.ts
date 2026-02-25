@@ -27,14 +27,18 @@ router.get('/email-config', isAuthenticated, async (req: any, res) => {
     }
 });
 
+import nodemailer from 'nodemailer';
+
 // POST /api/settings/email-config
 router.post('/email-config', isAuthenticated, async (req: any, res) => {
     try {
         let userId = req.user?.id;
+        let userEmail = req.user?.email;
         if (!userId) {
-            const firstUser = await db.query('SELECT id FROM users LIMIT 1');
+            const firstUser = await db.query('SELECT id, email FROM users LIMIT 1');
             if (firstUser.rows.length > 0) {
                 userId = firstUser.rows[0].id;
+                userEmail = firstUser.rows[0].email;
             } else {
                 // Database holds no users, create a default admin user
                 const newId = 'usr_admin_' + Date.now();
@@ -43,6 +47,7 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
                     [newId]
                 );
                 userId = newId;
+                userEmail = 'admin@admin.com';
             }
         }
 
@@ -52,13 +57,32 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
             return res.status(400).json({ error: 'App Password is required' });
         }
 
+        // VERIFICATION: Actually test the Google App Password BEFORE saving
+        console.log(`Verifying Google App Password for ${userEmail}...`);
+        try {
+            const testTransporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: {
+                    user: userEmail,
+                    pass: appPassword.trim(),
+                },
+            });
+            await testTransporter.verify();
+            console.log(`✅ App Password successfully authenticated with Google.`);
+        } catch (authError: any) {
+            console.error(`❌ Authentication failed:`, authError.message);
+            return res.status(401).json({
+                error: 'Authentication failed. Please check that you enabled 2FA and generated a fresh 16-letter App Password without spaces. Read the setup guide if you are stuck.'
+            });
+        }
+
         // Save to DB
         await db.query(
             `UPDATE users SET google_app_password = $1, updated_at = datetime('now') WHERE id = $2`,
             [appPassword.trim(), userId]
         );
 
-        console.log(`✅ App Password updated for user ${req.user?.email || 'admin'}`);
+        console.log(`✅ App Password updated for user ${userEmail}`);
 
         res.json({ success: true, message: 'Email configuration saved successfully' });
     } catch (error) {
