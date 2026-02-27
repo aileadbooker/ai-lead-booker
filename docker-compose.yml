@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Map the local database directory to the container to persist SQLite data
+      - ./database:/app/database
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=database/database.sqlite
+      # Make sure to copy your other environment variables here or use an env_file
+    env_file:
+      - .env
+    restart: always
