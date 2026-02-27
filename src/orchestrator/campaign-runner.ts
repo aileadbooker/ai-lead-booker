@@ -3,234 +3,200 @@ import leadGenerator from '../ingestion/lead-generator';
 import { LLMService } from '../intelligence/llm-service';
 import emailService from '../ingestion/email-service';
 import { Lead } from '../types';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Campaign Runner
- * Manages outbound campaigns, throttling, and sending
+ * Manages outbound campaigns, throttling, and sending for all users
  */
 class CampaignRunner {
-    private isRunning: boolean = false;
     private intervalId: NodeJS.Timeout | null = null;
     private llmService: LLMService;
-
-    // Campaign State
-    private status: 'idle' | 'running' | 'paused' = 'idle';
-    private currentNiche: string = '';
-    private dailyLimit: number = 50;
-    private sentToday: number = 0;
-    private lastRunDate: string = '';
+    private isProcessingQueue: boolean = false;
 
     constructor() {
         this.llmService = new LLMService();
     }
 
     /**
-     * Initialize campaign runner from DB state
+     * Initialize master campaign runner
      */
     async init() {
-        console.log('🔄 Initializing Campaign Runner from database...');
-        try {
-            // Get or create campaign config
-            let configResult = await db.query(`SELECT * FROM campaign_config WHERE id = 'default'`);
-
-            if (configResult.rows.length === 0) {
-                await db.query(
-                    `INSERT INTO campaign_config (id, status, current_niche, daily_limit) VALUES ('default', 'idle', '', 50)`
-                );
-            } else {
-                const config = configResult.rows[0];
-                this.status = config.status as any;
-                this.currentNiche = config.current_niche || '';
-                this.dailyLimit = config.daily_limit || 50;
-
-                if (this.status === 'running' && this.currentNiche) {
-                    console.log(`▶️ Resuming active campaign for "${this.currentNiche}"...`);
-
-                    // Reset daily count if it's a new day
-                    const today = new Date().toISOString().split('T')[0];
-                    if (this.lastRunDate !== today) {
-                        this.sentToday = 0;
-                        this.lastRunDate = today;
-                    }
-
-                    // Start processing loop
-                    this.processQueue();
-                    if (!this.intervalId) {
-                        this.intervalId = setInterval(() => this.processQueue(), 60000);
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Failed to initialize Campaign Runner:', error);
+        console.log('🔄 Initializing Master Campaign Runner loop...');
+        if (!this.intervalId) {
+            // Run processAllQueues every 60 seconds
+            this.intervalId = setInterval(() => this.processAllQueues(), 60000);
         }
     }
 
     /**
-     * Start the campaign
+     * Start the campaign for a specific user
      */
-    async start(niche: string, dailyLimit: number) {
-        if (this.status === 'running') return;
+    async start(userId: string, niche: string, dailyLimit: number) {
+        console.log(`🚀 Starting campaign for user ${userId} | niche: ${niche} (Limit: ${dailyLimit}/day)`);
 
-        console.log(`🚀 Starting campaign for niche: ${niche} (Limit: ${dailyLimit}/day)`);
-
-        this.status = 'running';
-        this.currentNiche = niche;
-        this.dailyLimit = dailyLimit;
+        const id = uuidv4();
 
         // Save to DB
         await db.query(
-            `UPDATE campaign_config 
-             SET status = 'running', current_niche = $1, daily_limit = $2, updated_at = datetime('now')
-             WHERE id = 'default'`,
-            [niche, dailyLimit]
+            `INSERT INTO campaign_config (id, user_id, status, current_niche, daily_limit, updated_at) 
+             VALUES ($1, $2, 'running', $3, $4, datetime('now'))
+             ON CONFLICT(user_id) DO UPDATE SET 
+             status = 'running', current_niche = excluded.current_niche, daily_limit = excluded.daily_limit, updated_at = datetime('now')`,
+            [id, userId, niche, dailyLimit]
         );
 
-        // Reset daily count if it's a new day
-        const today = new Date().toISOString().split('T')[0];
-        if (this.lastRunDate !== today) {
-            this.sentToday = 0;
-            this.lastRunDate = today;
-        }
-
-        // Initialize from DB if 0 (handling restarts)
-        if (this.sentToday === 0) {
-            const countResult = await db.query(
-                `SELECT COUNT(*) as count FROM messages 
-                 WHERE direction = 'outbound' 
-                 AND date(sent_at) = date('now')`
-            );
-            this.sentToday = parseInt(countResult.rows[0].count) || 0;
-            console.log(`📊 Restored daily count: ${this.sentToday}/${this.dailyLimit}`);
-        }
-
-        // Start processing loop
-        this.processQueue(); // Run immediately
-        this.intervalId = setInterval(() => this.processQueue(), 60000); // Check every minute
+        // Run immediately for this user without waiting for the next interval
+        this.processUserQueue(userId, niche, dailyLimit).catch(err => {
+            console.error(`Immediate queue processing failed for ${userId}:`, err);
+        });
     }
 
     /**
-     * Stop/Pause the campaign
+     * Stop/Pause the campaign for a specific user
      */
-    async stop() {
-        console.log('🛑 Stopping campaign');
-        this.status = 'idle'; // effectively "stopped" for MVP, 'paused' could keep state
+    async stop(userId: string) {
+        console.log(`🛑 Stopping campaign for user ${userId}`);
 
         // Save to DB
         await db.query(
             `UPDATE campaign_config 
              SET status = 'idle', updated_at = datetime('now')
-             WHERE id = 'default'`
+             WHERE user_id = $1`,
+            [userId]
         );
-
-        if (this.intervalId) {
-            clearInterval(this.intervalId);
-            this.intervalId = null;
-        }
     }
 
     /**
-     * Get current stats
+     * Get current stats for a specific user
      */
-    /**
-     * Get current stats
-     */
-    async getStats() {
-        // Read config from DB to ensure sync
-        const configResult = await db.query(`SELECT status, current_niche, daily_limit FROM campaign_config WHERE id = 'default'`);
+    async getStats(userId: string) {
+        let status = 'idle';
+        let niche = '';
+        let dailyLimit = 50;
+
+        const configResult = await db.query(`SELECT status, current_niche, daily_limit FROM campaign_config WHERE user_id = $1`, [userId]);
         if (configResult.rows.length > 0) {
             const config = configResult.rows[0];
-            this.status = config.status as any;
-            this.currentNiche = config.current_niche || '';
-            this.dailyLimit = config.daily_limit || 50;
+            status = config.status as string;
+            niche = config.current_niche || '';
+            dailyLimit = config.daily_limit || 50;
         }
 
-        // Always fetch truth from DB to avoid memory drift
+        // Calculate sentToday dynamically
         const countResult = await db.query(
-            `SELECT COUNT(*) as count FROM messages 
-             WHERE direction = 'outbound' 
-             AND date(sent_at) = date('now')`
+            `SELECT COUNT(*) as count FROM messages m
+             JOIN leads l ON m.lead_id = l.id
+             WHERE l.user_id = $1 AND m.direction = 'outbound' 
+             AND date(m.sent_at, 'localtime') = date('now', 'localtime')`,
+            [userId]
         );
-        this.sentToday = parseInt(countResult.rows[0].count) || 0;
+        const sentToday = parseInt(countResult.rows[0].count) || 0;
 
         return {
-            status: this.status,
-            niche: this.currentNiche,
-            sentToday: this.sentToday,
-            dailyLimit: this.dailyLimit,
-            active: this.status === 'running'
+            status,
+            niche,
+            sentToday,
+            dailyLimit,
+            active: status === 'running'
         };
     }
 
-    // State
-    private isProcessingQueue: boolean = false;
-
     /**
-     * Main processing loop
+     * Main processing loop across all users
      */
-    private async processQueue() {
-        if (this.status !== 'running') return;
+    private async processAllQueues() {
         if (this.isProcessingQueue) {
-            console.log('⚠️ Campaign runner already processing. Skipping cycle.');
+            console.log('⚠️ Master Campaign runner already processing. Skipping cycle.');
             return;
         }
 
         this.isProcessingQueue = true;
 
         try {
-            // 1. Check daily limit
-            // BUGFIX: Use toLocaleDateString('en-CA') to get local YYYY-MM-DD instead of UTC
-            const today = new Date().toLocaleDateString('en-CA', {
-                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-            });
+            const activeCampaigns = await db.query(`SELECT * FROM campaign_config WHERE status = 'running'`);
 
-            if (this.lastRunDate !== today) {
-                this.sentToday = 0; // Reset for new day
-                this.lastRunDate = today;
+            for (const config of activeCampaigns.rows) {
+                await this.processUserQueue(config.user_id, config.current_niche, config.daily_limit);
             }
+        } catch (error) {
+            console.error('Error in master campaign processing loop:', error);
+        } finally {
+            this.isProcessingQueue = false;
+        }
+    }
 
-            if (this.sentToday >= this.dailyLimit) {
-                console.log(`⚠️ Daily limit reached (${this.sentToday}/${this.dailyLimit}). Pausing until tomorrow.`);
+    /**
+     * Process outreach for a single user
+     */
+    private async processUserQueue(userId: string, niche: string, dailyLimit: number) {
+        try {
+            // 1. Check daily limit
+            const countResult = await db.query(
+                `SELECT COUNT(*) as count FROM messages m
+                 JOIN leads l ON m.lead_id = l.id
+                 WHERE l.user_id = $1 AND m.direction = 'outbound' 
+                 AND date(m.sent_at, 'localtime') = date('now', 'localtime')`,
+                [userId]
+            );
+            let sentToday = parseInt(countResult.rows[0].count) || 0;
+
+            if (sentToday >= dailyLimit) {
+                console.log(`⚠️ Daily limit reached for user ${userId} (${sentToday}/${dailyLimit}). Pausing until tomorrow.`);
                 return;
             }
 
             // 2. Find "new" leads that haven't been contacted yet
-            // Updated to fetch ANY 'new' leads if they were generated by our scraper (web_scrape)
-            // or explicitly marked for campaign (outbound_campaign)
             let leadsToContact = await db.query(
                 `SELECT * FROM leads 
-                 WHERE (source = 'outbound_campaign' OR source = 'web_scrape')
+                 WHERE user_id = $1
+                 AND (source = 'outbound_campaign' OR source = 'web_scrape')
                  AND status = 'new'
-                 LIMIT 5` // Batches of 5 to avoid overwhelming
+                 LIMIT 5`,
+                [userId]
             );
 
             // 3. If no leads, generate more!
-            const remainingForToday = this.dailyLimit - this.sentToday;
+            const remainingForToday = dailyLimit - sentToday;
             if (leadsToContact.rows.length === 0 && remainingForToday > 0) {
-                console.log(`📉 No new leads in queue. Generating fresh leads to satisfy remaining daily target (${remainingForToday} needed)...`);
+                console.log(`📉 No new leads in queue for user ${userId}. Generating fresh leads for niche "${niche}" (${remainingForToday} needed)...`);
 
-                // Aggressively fetch a chunk of leads to keep the pipeline moving rapidly
                 const fetchCount = Math.min(25, remainingForToday);
-                const newLeads = await leadGenerator.generateLeads(this.currentNiche, fetchCount);
+                const newLeads = await leadGenerator.generateLeads(niche, fetchCount);
 
                 if (newLeads.length === 0) {
-                    console.log('⚠️ Could not generate leads. Retrying later.');
+                    console.log(`⚠️ Could not generate leads for user ${userId}. Retrying later.`);
                     return;
                 }
 
-                // Refetch to get the DB rows (consistent format)
-                // We must use the IDs we just created
-                const idList = newLeads.map(l => `'${l.id}'`).join(',');
+                // Insert generated leads explicitly linking them to the user
+                for (const l of newLeads) {
+                    await db.query(
+                        `INSERT INTO leads (id, user_id, email, name, company, source, status, created_at, updated_at, opted_out, followup_count)
+                         VALUES ($1, $2, $3, $4, $5, 'web_scrape', 'new', datetime('now'), datetime('now'), 0, 0)
+                         ON CONFLICT(email) DO NOTHING`,
+                        [l.id, userId, l.email, l.name, l.company]
+                    );
+                }
+
+                // Refetch leads explicitly matching user_id
                 leadsToContact = await db.query(
-                    `SELECT * FROM leads WHERE id IN (${idList})`
+                    `SELECT * FROM leads 
+                     WHERE user_id = $1 
+                     AND (source = 'outbound_campaign' OR source = 'web_scrape')
+                     AND status = 'new'
+                     LIMIT 5`,
+                    [userId]
                 );
             }
 
             // 4. Process outreach
             for (const row of leadsToContact.rows) {
-                if (this.sentToday >= this.dailyLimit) break;
+                if (sentToday >= dailyLimit) break;
 
                 const lead: Lead = {
                     id: row.id,
+                    user_id: row.user_id,
                     email: row.email,
                     name: row.name,
                     company: row.company,
@@ -242,27 +208,25 @@ class CampaignRunner {
                     opted_out: !!row.opted_out
                 };
 
-                const success = await this.sendInitialOutreach(lead);
+                const success = await this.sendInitialOutreach(userId, lead);
                 if (success) {
-                    this.sentToday++;
+                    sentToday++;
                     // Slight delay to be nice to SMTP
                     await new Promise(r => setTimeout(r, 2000));
                 }
             }
 
         } catch (error) {
-            console.error('Error in campaign runner:', error);
-        } finally {
-            this.isProcessingQueue = false;
+            console.error(`Error in user queue for ${userId}:`, error);
         }
     }
 
     /**
      * Send the first email to a lead
      */
-    private async sendInitialOutreach(lead: Lead): Promise<boolean> {
+    private async sendInitialOutreach(userId: string, lead: Lead): Promise<boolean> {
         try {
-            console.log(`📧 Sending initial outreach to ${lead.email}...`);
+            console.log(`📧 User ${userId} sending initial outreach to ${lead.email}...`);
 
             // 1. Get initial pitch decision from LLM (simulated)
             const decision = await this.llmService.getDecision(
@@ -270,7 +234,6 @@ class CampaignRunner {
                 [],
                 {
                     business_name: 'AI Agency',
-                    // industry: 'Marketing', // Removed invalid property
                     services: [],
                     tone: 'professional',
                     confidence_threshold: 0.8
@@ -279,8 +242,9 @@ class CampaignRunner {
             );
 
             if (decision.message_draft) {
-                // 2. Send Email
+                // 2. Send Email using the user's specific EmailService logic
                 const result = await emailService.sendEmail(
+                    userId,
                     lead,
                     'Question for you',
                     this.formatEmailBody(decision.message_draft)
@@ -288,11 +252,9 @@ class CampaignRunner {
 
                 if (!result.sent) {
                     console.error(`Failed to send email to ${lead.email}: ${result.reason}`);
-
-                    // NEW: Explicitly mark as failed so the UI doesn't display incorrect state
                     await db.query(
-                        `UPDATE leads SET status = 'failed' WHERE id = $1`,
-                        [lead.id]
+                        `UPDATE leads SET status = 'failed' WHERE id = $1 AND user_id = $2`,
+                        [lead.id, userId]
                     );
                     return false;
                 }
@@ -302,18 +264,18 @@ class CampaignRunner {
                     `UPDATE leads 
                      SET status = 'contacted', 
                          last_contact_at = datetime('now') 
-                     WHERE id = $1`,
-                    [lead.id]
+                     WHERE id = $1 AND user_id = $2`,
+                    [lead.id, userId]
                 );
 
                 // 4. Log Message
                 await db.query(
                     `INSERT INTO messages (id, lead_id, direction, message_id, in_reply_to, subject, body, sent_at)
-                     VALUES ($1, $2, 'outbound', $3, $4, datetime('now'))`,
-                    [uuidv4(), lead.id, 'Question for you', decision.message_draft]
+                     VALUES ($1, $2, 'outbound', $3, NULL, $4, $5, datetime('now'))`,
+                    [uuidv4(), lead.id, result.messageId || uuidv4(), 'Question for you', decision.message_draft]
                 );
 
-                console.log(`✅ Sent to ${lead.email}`);
+                console.log(`✅ Sent from ${userId} to ${lead.email}`);
                 return true;
             }
             return false;
@@ -323,6 +285,7 @@ class CampaignRunner {
             return false;
         }
     }
+
     /**
      * Convert markdown-style text to HTML
      */
@@ -330,23 +293,12 @@ class CampaignRunner {
         if (!text) return '';
 
         let html = text
-            // Bold (**text**)
             .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-            // Italic (*text*)
             .replace(/\*(.*?)\*/g, '<i>$1</i>')
-            // Newlines to <br>
             .replace(/\n/g, '<br>');
 
         return `<div style="font-family: sans-serif; font-size: 14px; line-height: 1.5; color: #333;">${html}</div>`;
     }
-}
-
-// Helper to generate UUIDs since we didn't import inside class
-function uuidv4() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
 }
 
 export default new CampaignRunner();

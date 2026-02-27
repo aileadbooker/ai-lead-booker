@@ -213,6 +213,7 @@ class GmailService {
     rowToLead(row) {
         return {
             id: row.id,
+            user_id: row.user_id,
             email: row.email,
             name: row.name,
             phone: row.phone,

@@ -9,9 +9,7 @@ router.get('/email-config', isAuthenticated, async (req: any, res) => {
     try {
         let userId = req.user?.id;
         if (!userId) {
-            const firstUser = await db.query('SELECT id FROM users LIMIT 1');
-            if (firstUser.rows.length > 0) userId = firstUser.rows[0].id;
-            else return res.json({ configured: false, email: 'admin' });
+            return res.status(401).json({ error: 'Unauthorized' });
         }
 
         const result = await db.query('SELECT google_app_password FROM users WHERE id = $1', [userId]);
@@ -35,20 +33,7 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
         let userId = req.user?.id;
         let userEmail = req.user?.email;
         if (!userId) {
-            const firstUser = await db.query('SELECT id, email FROM users LIMIT 1');
-            if (firstUser.rows.length > 0) {
-                userId = firstUser.rows[0].id;
-                userEmail = firstUser.rows[0].email;
-            } else {
-                // Database holds no users, create a default admin user
-                const newId = 'usr_admin_' + Date.now();
-                await db.query(
-                    `INSERT INTO users (id, email, name, has_paid, onboarding_completed) VALUES ($1, 'admin@admin.com', 'Admin', 1, 1)`,
-                    [newId]
-                );
-                userId = newId;
-                userEmail = 'admin@admin.com';
-            }
+            return res.status(401).json({ error: 'Unauthorized' });
         }
 
         const { appPassword, googleEmail } = req.body;
@@ -64,15 +49,19 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
         console.log(`Verifying Google App Password for explicit email account: ${googleEmail}...`);
         try {
             const testTransporter = nodemailer.createTransport({
-                service: 'gmail',
+                host: 'smtp.gmail.com',
+                port: 465,
+                secure: true, // Use Implicit SSL (Port 465)
+                requireTLS: true,
+                family: 4, // Force IPv4 routing (Bypass macOS ENETUNREACH error)
                 auth: {
-                    user: googleEmail.trim(), // Use the explicitly provided address!
+                    user: googleEmail.trim(),
                     pass: appPassword.trim(),
                 },
-                connectionTimeout: 10000, // 10 seconds max connection wait
-                greetingTimeout: 10000,
-                socketTimeout: 10000,
-            });
+                connectionTimeout: 15000, // 15 seconds max connection wait
+                greetingTimeout: 15000,
+                socketTimeout: 15000,
+            } as any);
             await testTransporter.verify();
             console.log(`✅ App Password successfully authenticated for ${googleEmail}.`);
         } catch (authError: any) {

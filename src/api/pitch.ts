@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import db from '../config/database';
+import { PitchManager } from '../utils/pitch-manager';
 
 const router = Router();
 
@@ -48,10 +49,12 @@ Looking forward to speaking with you! 📞`,
  * GET /api/pitch
  * Get current custom pitch configuration
  */
-router.get('/pitch', async (req: Request, res: Response) => {
+router.get('/pitch', async (req: any, res: Response) => {
     try {
+        const userId = req.user?.id;
         const result = await db.query(
-            `SELECT * FROM custom_pitch WHERE id = 'default'`
+            `SELECT * FROM custom_pitch WHERE user_id = $1`,
+            [userId]
         );
 
         if (result.rows.length === 0) {
@@ -69,8 +72,9 @@ router.get('/pitch', async (req: Request, res: Response) => {
  * PUT /api/pitch
  * Update custom pitch configuration
  */
-router.put('/pitch', async (req: Request, res: Response) => {
+router.put('/pitch', async (req: any, res: Response) => {
     try {
+        const userId = req.user?.id;
         const { initial_pitch, yes_response, no_response, yes_2_response, no_2_response } = req.body;
 
         // Validate required fields
@@ -79,15 +83,18 @@ router.put('/pitch', async (req: Request, res: Response) => {
         }
 
         await db.query(
-            `INSERT INTO custom_pitch (id, initial_pitch, yes_response, no_response, updated_at)
-             VALUES ('default', $1, $2, $3, datetime('now'))
-             ON CONFLICT(id) DO UPDATE SET
+            `INSERT INTO custom_pitch (id, user_id, initial_pitch, yes_response, no_response, updated_at)
+             VALUES ($1, $2, $3, $4, $5, datetime('now'))
+             ON CONFLICT(user_id) DO UPDATE SET
                  initial_pitch = excluded.initial_pitch,
                  yes_response = excluded.yes_response,
                  no_response = excluded.no_response,
                  updated_at = excluded.updated_at`,
-            [initial_pitch, yes_response, no_response]
+            [require('crypto').randomUUID(), userId, initial_pitch, yes_response, no_response]
         );
+
+        // Clear the RAM cache so campaign runner picks up these new edits immediately
+        PitchManager.clearCache(userId);
 
         res.json({ success: true, message: 'Pitch updated successfully' });
     } catch (error) {
@@ -100,23 +107,27 @@ router.put('/pitch', async (req: Request, res: Response) => {
  * POST /api/pitch/reset
  * Reset to AI-recommended defaults
  */
-router.post('/pitch/reset', async (req: Request, res: Response) => {
+router.post('/pitch/reset', async (req: any, res: Response) => {
     try {
-        console.log('[DEBUG] POST /api/pitch/reset triggered');
+        const userId = req.user?.id;
+        console.log(`[DEBUG] POST /api/pitch/reset triggered by user ${userId}`);
 
         await db.query(
-            `INSERT INTO custom_pitch (id, initial_pitch, yes_response, no_response, yes_2_response, no_2_response, updated_at)
-             VALUES ('default', $1, $2, $3, $4, $5, datetime('now'))
-             ON CONFLICT(id) DO UPDATE SET
+            `INSERT INTO custom_pitch (id, user_id, initial_pitch, yes_response, no_response, yes_2_response, no_2_response, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, datetime('now'))
+             ON CONFLICT(user_id) DO UPDATE SET
                  initial_pitch = excluded.initial_pitch,
                  yes_response = excluded.yes_response,
                  no_response = excluded.no_response,
                  yes_2_response = excluded.yes_2_response,
                  no_2_response = excluded.no_2_response,
                  updated_at = excluded.updated_at`,
-            [DEFAULT_PITCH.initial_pitch, DEFAULT_PITCH.yes_response, DEFAULT_PITCH.no_response,
+            [require('crypto').randomUUID(), userId, DEFAULT_PITCH.initial_pitch, DEFAULT_PITCH.yes_response, DEFAULT_PITCH.no_response,
             DEFAULT_PITCH.yes_2_response, DEFAULT_PITCH.no_2_response]
         );
+
+        // Clear the cache so campaign runner reverts to defaults immediately
+        PitchManager.clearCache(userId);
 
         res.json({ success: true, message: 'Reset to AI-recommended defaults', pitch: DEFAULT_PITCH });
     } catch (error) {

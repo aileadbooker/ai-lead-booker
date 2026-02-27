@@ -2,6 +2,7 @@ import express from 'express';
 import Stripe from 'stripe';
 import crypto from 'crypto';
 import db from '../config/database';
+import { isAuthenticated } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_mock', {
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 // POST /api/create-checkout-session
-router.post('/create-checkout-session', async (req, res) => {
+router.post('/create-checkout-session', isAuthenticated, async (req: any, res) => {
     try {
         const { plan } = req.body; // 'starter', 'growth'
 
@@ -64,7 +65,7 @@ router.post('/create-checkout-session', async (req, res) => {
 });
 
 // POST /api/create-portal-session
-router.post('/create-portal-session', async (req, res) => {
+router.post('/create-portal-session', isAuthenticated, async (req: any, res) => {
     try {
         // MOCK MODE
         if (process.env.STRIPE_SECRET_KEY?.includes('placeholder')) {
@@ -78,9 +79,8 @@ router.post('/create-portal-session', async (req, res) => {
 
         if (!isMockMode) {
             console.log('Creating new Stripe Customer due to missing DB support...');
-            // Fetch any user to attach the customer to (fallback logic)
-            const userRes = await db.query('SELECT email FROM users LIMIT 1');
-            const email = userRes.rows[0]?.email || 'fallback@example.com';
+            // Fetch current user email
+            const email = req.user?.email || 'fallback@example.com';
 
             // In a complete implementation, this would be tied to the specific user's record
             // For now, we generate a fresh customer to allow the portal to open

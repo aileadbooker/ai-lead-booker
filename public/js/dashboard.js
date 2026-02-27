@@ -1,6 +1,14 @@
-// Authentication Check
+// Authentication Check & Initialization
 fetch('/api/me').then(res => {
-    if (res.status === 401) window.location.href = '/';
+    if (res.status === 401) {
+        window.location.href = '/';
+    } else {
+        // Strict Authorization: Wait for session to be fully synchronized before fetching data
+        loadLeads();
+        setInterval(loadLeads, 30000); // Auto-refresh leads every 30s
+        loadPitch();
+        loadEmailConfig();
+    }
 }).catch(() => { });
 
 // Global Functions for HTML onclicks
@@ -549,11 +557,7 @@ style.innerHTML = `
 `;
 document.head.appendChild(style);
 
-// Initial load
-loadLeads();
-setInterval(loadLeads, 30000); // Auto-refresh leads every 30s
-loadPitch();
-loadEmailConfig();
+// Initial load handled by /api/me fetch block at the top
 
 async function savePitch() {
     const initial_pitch = document.getElementById('pitch-initial').value;
@@ -636,25 +640,42 @@ async function saveEmailConfig() {
         }
 
         document.getElementById('app-password').value = '';
-        updateEmailConfigUI(true);
-        alert('✅ Email connected successfully!');
+        updateEmailConfigUI(true, 'Connected');
+        showEmailNotification('✅ Email connected successfully!', 'success');
 
     } catch (error) {
         console.error(error);
-        alert(`❌ ${error.message}`);
+        updateEmailConfigUI(false, error.message);
+        showEmailNotification(`❌ ${error.message}`, 'error');
     } finally {
         btn.innerText = originalText;
         btn.disabled = false;
     }
 }
 
-function updateEmailConfigUI(isConfigured) {
+function updateEmailConfigUI(isConfigured, message = 'Not Connected') {
     const statusEl = document.getElementById('email-config-status');
     if (isConfigured) {
-        statusEl.innerHTML = '✅ Status: <span style="color: #4ade80">Connected</span>';
+        statusEl.innerHTML = `✅ Status: <span style="color: #4ade80">Connected</span>`;
     } else {
-        statusEl.innerHTML = '⚠️ Status: <span style="color: #fbbf24">Not Connected</span>';
+        statusEl.innerHTML = `⚠️ Status: <span style="color: #ef4444">${message}</span>`;
     }
+}
+
+function showEmailNotification(message, type) {
+    const el = document.createElement('div');
+    el.innerText = message;
+    el.style.position = 'fixed';
+    el.style.top = '20px';
+    el.style.right = '20px';
+    el.style.padding = '15px';
+    el.style.borderRadius = '8px';
+    el.style.background = type === 'success' ? 'rgba(16, 185, 129, 0.9)' : 'rgba(239, 68, 68, 0.9)';
+    el.style.color = '#fff';
+    el.style.zIndex = '9999';
+    el.style.maxWidth = '400px';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 7000);
 }
 
 // Lead Filter Listeners

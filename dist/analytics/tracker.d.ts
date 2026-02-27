@@ -10,11 +10,11 @@ export declare class AnalyticsTracker {
     /**
      * Track an analytics event
      */
-    track(eventType: AnalyticsEventType, leadId?: string, metadata?: Record<string, any>): Promise<void>;
+    track(eventType: AnalyticsEventType, userId: string, leadId?: string, metadata?: Record<string, any>): Promise<void>;
     /**
      * Get analytics summary for a date range
      */
-    getSummary(startDate?: string, endDate?: string): Promise<{
+    getSummary(userId: string, startDate?: string, endDate?: string): Promise<{
         email_sent: number;
         reply_received: number;
         interested: number;
@@ -27,7 +27,7 @@ export declare class AnalyticsTracker {
     /**
      * Get conversion funnel data
      */
-    getConversionFunnel(startDate?: string, endDate?: string): Promise<{
+    getConversionFunnel(userId: string, startDate?: string, endDate?: string): Promise<{
         sent: number;
         replied: number;
         interested: number;
@@ -36,11 +36,11 @@ export declare class AnalyticsTracker {
     /**
      * Get activity timeline (events per day)
      */
-    getActivityTimeline(days?: number): Promise<Record<string, Record<string, number>>>;
+    getActivityTimeline(userId: string, days?: number): Promise<Record<string, Record<string, number>>>;
     /**
      * Get top performing leads
      */
-    getTopLeads(limit?: number): Promise<any[]>;
+    getTopLeads(userId: string, limit?: number): Promise<any[]>;
     private calculateRate;
     private getDateDaysAgo;
 }

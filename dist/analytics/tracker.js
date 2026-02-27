@@ -14,12 +14,12 @@ class AnalyticsTracker {
     /**
      * Track an analytics event
      */
-    async track(eventType, leadId, metadata) {
+    async track(eventType, userId, leadId, metadata) {
         try {
             const id = (0, uuid_1.v4)();
             const metadataJson = metadata ? JSON.stringify(metadata) : null;
-            await database_1.default.query(`INSERT INTO analytics_events (id, event_type, lead_id, metadata, created_at)
-                 VALUES ($1, $2, $3, $4, datetime('now'))`, [id, eventType, leadId || null, metadataJson]);
+            await database_1.default.query(`INSERT INTO analytics_events (id, user_id, event_type, lead_id, metadata, created_at)
+                 VALUES ($1, $2, $3, $4, $5, datetime('now'))`, [id, userId, eventType, leadId || null, metadataJson]);
             console.log(`📊 Tracked event: ${eventType}${leadId ? ` for lead ${leadId}` : ''}`);
         }
         catch (error) {
@@ -30,13 +30,13 @@ class AnalyticsTracker {
     /**
      * Get analytics summary for a date range
      */
-    async getSummary(startDate, endDate) {
+    async getSummary(userId, startDate, endDate) {
         const start = startDate || this.getDateDaysAgo(30);
         const end = endDate || new Date().toISOString();
         const events = await database_1.default.query(`SELECT event_type, COUNT(*) as count
              FROM analytics_events
-             WHERE created_at >= $1 AND created_at <= $2
-             GROUP BY event_type`, [start, end]);
+             WHERE user_id = $1 AND created_at >= $2 AND created_at <= $3
+             GROUP BY event_type`, [userId, start, end]);
         const summary = {};
         for (const row of events.rows) {
             summary[row.event_type] = row.count;
@@ -55,8 +55,8 @@ class AnalyticsTracker {
     /**
      * Get conversion funnel data
      */
-    async getConversionFunnel(startDate, endDate) {
-        const summary = await this.getSummary(startDate, endDate);
+    async getConversionFunnel(userId, startDate, endDate) {
+        const summary = await this.getSummary(userId, startDate, endDate);
         return {
             sent: summary.email_sent,
             replied: summary.reply_received,
@@ -67,16 +67,16 @@ class AnalyticsTracker {
     /**
      * Get activity timeline (events per day)
      */
-    async getActivityTimeline(days = 7) {
+    async getActivityTimeline(userId, days = 7) {
         const startDate = this.getDateDaysAgo(days);
         const events = await database_1.default.query(`SELECT 
                 DATE(created_at, 'localtime') as date,
                 event_type,
                 COUNT(*) as count
              FROM analytics_events
-             WHERE created_at >= $1
+             WHERE user_id = $1 AND created_at >= $2
              GROUP BY DATE(created_at, 'localtime'), event_type
-             ORDER BY date ASC`, [startDate]);
+             ORDER BY date ASC`, [userId, startDate]);
         // Format for charting
         const timeline = {};
         for (const row of events.rows) {
@@ -93,7 +93,7 @@ class AnalyticsTracker {
     /**
      * Get top performing leads
      */
-    async getTopLeads(limit = 10) {
+    async getTopLeads(userId, limit = 10) {
         const leads = await database_1.default.query(`SELECT 
                 l.id,
                 l.name,
@@ -102,10 +102,10 @@ class AnalyticsTracker {
                 COUNT(ae.id) as event_count
              FROM leads l
              LEFT JOIN analytics_events ae ON l.id = ae.lead_id
-             WHERE l.status != 'disqualified'
+             WHERE l.user_id = $1 AND l.status != 'disqualified'
              GROUP BY l.id
              ORDER BY event_count DESC
-             LIMIT $1`, [limit]);
+             LIMIT $2`, [userId, limit]);
         return leads.rows;
     }
     // Helper methods

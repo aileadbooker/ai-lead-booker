@@ -2,11 +2,11 @@
  * Pitch Manager - Loads custom pitch templates from database
  */
 export declare class PitchManager {
-    private static cachedPitch;
+    private static cachedPitches;
     /**
      * Get custom pitch configuration
      */
-    static getPitch(): Promise<any>;
+    static getPitch(userId: string): Promise<any>;
     /**
      * Get AI-recommended defaults
      */
@@ -20,7 +20,7 @@ export declare class PitchManager {
     /**
      * Clear cache (call this after pitch updates)
      */
-    static clearCache(): void;
+    static clearCache(userId?: string): void;
     /**
      * Replace {{name}} placeholder
      */

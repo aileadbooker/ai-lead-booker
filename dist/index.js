@@ -59,7 +59,7 @@ class EmailMonitor {
         this.isPolling = true;
         try {
             console.log('\n--- Polling inbox ---');
-            const newLeads = await email_service_1.default.pollInbox();
+            const newLeads = await email_service_1.default.pollAllInboxes();
             if (newLeads.length === 0) {
                 console.log('No new leads');
             }

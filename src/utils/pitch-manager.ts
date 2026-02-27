@@ -4,23 +4,23 @@ import db from '../config/database';
  * Pitch Manager - Loads custom pitch templates from database
  */
 export class PitchManager {
-    private static cachedPitch: any = null;
+    private static cachedPitches: Map<string, any> = new Map();
 
     /**
      * Get custom pitch configuration
      */
-    static async getPitch() {
+    static async getPitch(userId: string) {
         try {
             // Use cached version if available (valid for 5 minutes)
-            if (this.cachedPitch) {
-                return this.cachedPitch;
+            if (this.cachedPitches.has(userId)) {
+                return this.cachedPitches.get(userId);
             }
 
-            const result = await db.query(`SELECT * FROM custom_pitch WHERE id = 'default'`);
+            const result = await db.query(`SELECT * FROM custom_pitch WHERE user_id = $1`, [userId]);
 
             if (result.rows.length > 0) {
-                this.cachedPitch = result.rows[0];
-                return this.cachedPitch;
+                this.cachedPitches.set(userId, result.rows[0]);
+                return result.rows[0];
             }
 
             // Return defaults if not found
@@ -93,8 +93,12 @@ Wishing you all the best with your business! 🚀`
     /**
      * Clear cache (call this after pitch updates)
      */
-    static clearCache() {
-        this.cachedPitch = null;
+    static clearCache(userId?: string) {
+        if (userId) {
+            this.cachedPitches.delete(userId);
+        } else {
+            this.cachedPitches.clear();
+        }
     }
 
     /**

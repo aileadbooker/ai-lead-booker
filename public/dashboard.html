@@ -285,49 +285,7 @@
     </div>
     </div>
 
-    <!-- CAMPAIGNS TAB -->
-    <div id="campaigns-tab" class="tab-content">
-        <div class="card">
-            <h2 style="margin-bottom: 2rem;">🚀 Outbound Campaigns</h2>
 
-            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
-                <div>
-                    <label style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary);">Target
-                        Niche</label>
-                    <input type="text" id="campaign-niche" placeholder="e.g. Gym Owners, Real Estate Agents"
-                        style="width: 100%; padding: 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 1.1rem;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary);">Daily Sending
-                        Limit</label>
-                    <input type="number" id="campaign-limit" value="50" min="10" max="1000"
-                        style="width: 100%; padding: 1rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 1.1rem;">
-                </div>
-            </div>
-
-            <div style="text-align: center; margin-bottom: 3rem;">
-                <button id="campaign-btn" onclick="toggleCampaign()"
-                    style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 1.5rem 4rem; font-size: 1.5rem; font-weight: bold; border-radius: 50px; border: none; cursor: pointer; color: white; transition: all 0.3s ease; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);">
-                    START CAMPAIGN ▶️
-                </button>
-                <p id="campaign-status-text" style="margin-top: 1rem; color: var(--text-secondary);">Ready to launch</p>
-            </div>
-
-            <!-- Live Console -->
-            <div
-                style="background: #0f172a; border-radius: 12px; padding: 1.5rem; font-family: 'Monaco', 'Consolas', monospace; height: 300px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1);">
-                <div
-                    style="color: #64748b; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;">
-                    SYSTEM CONSOLE_
-                </div>
-                <div id="campaign-console"
-                    style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.9rem;">
-                    <div style="color: #cbd5e1;">> System ready...</div>
-                    <div style="color: #cbd5e1;">> Waiting for command...</div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- SETTINGS TAB -->
     <div id="settings-tab" class="tab-content">

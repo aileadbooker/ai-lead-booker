@@ -66,28 +66,37 @@ class EmailService {
         });
     }
     /**
-     * Poll IMAP inbox for new unread messages
+     * Poll ALL IMAP inboxes for new unread messages
      */
-    async pollInbox() {
+    async pollAllInboxes() {
         if (!config_1.config.enableRealEmail)
             return [];
-        let connection = null;
+        let allNewLeads = [];
         try {
-            // Dynamic IMAP Config
-            let imapUser = config_1.config.imap.user;
-            let imapPass = config_1.config.imap.pass;
-            // Try to load from DB
-            try {
-                const userRes = await database_1.default.query('SELECT email, google_app_password FROM users WHERE google_app_password IS NOT NULL LIMIT 1');
-                if (userRes.rows.length > 0) {
-                    imapUser = userRes.rows[0].email;
-                    imapPass = userRes.rows[0].google_app_password;
-                    console.log(`Using App Password for IMAP (${imapUser})`);
+            // Get all strictly initialized users
+            const users = await database_1.default.query(`SELECT id, email, google_app_password FROM users WHERE google_app_password IS NOT NULL`);
+            for (const user of users.rows) {
+                try {
+                    const leads = await this.pollUserInbox(user.id, user.email, user.google_app_password);
+                    allNewLeads.push(...leads);
+                }
+                catch (err) {
+                    console.error(`Error polling inbox for user ${user.id}:`, err);
                 }
             }
-            catch (e) {
-                console.warn('Failed to load IMAP creds from DB, using env fallback');
-            }
+            return allNewLeads;
+        }
+        catch (error) {
+            console.error('Error in multi-tenant general inbox poller:', error);
+            return [];
+        }
+    }
+    /**
+     * Poll a specific user's IMAP inbox
+     */
+    async pollUserInbox(userId, imapUser, imapPass) {
+        let connection = null;
+        try {
             const imapConfig = {
                 imap: {
                     user: imapUser,
@@ -102,14 +111,13 @@ class EmailService {
             console.log('Connecting to IMAP...');
             connection = await imap_simple_1.default.connect(imapConfig);
             await connection.openBox('INBOX');
-            // CRITICAL: Only fetch emails from leads WE contacted (those with outbound messages)
-            // This prevents fetching 9000+ unread spam emails
+            // CRITICAL: Only fetch emails from leads WE contacted (those with outbound messages) for THIS user
             const outboundLeads = await database_1.default.query(`
                 SELECT DISTINCT l.email 
                 FROM leads l
                 JOIN messages m ON l.id = m.lead_id
-                WHERE m.direction = 'outbound'
-            `);
+                WHERE m.direction = 'outbound' AND l.user_id = $1
+            `, [userId]);
             console.log(`Checking UNSEEN emails from ${outboundLeads.rows.length} leads we contacted...`);
             const newLeads = [];
             // For each lead we contacted, check for UNSEEN replies
@@ -127,7 +135,7 @@ class EmailService {
                     }
                     for (const message of messages) {
                         try {
-                            const lead = await this.processMessage(message);
+                            const lead = await this.processMessage(userId, message);
                             if (lead) {
                                 newLeads.push(lead);
                                 // Mark as seen
@@ -156,7 +164,7 @@ class EmailService {
     /**
      * Process a single IMAP message
      */
-    async processMessage(message) {
+    async processMessage(userId, message) {
         const allParts = message.parts.find(part => part.which === '');
         const idHeader = message.parts.find(part => part.which === 'HEADER');
         if (!allParts || !allParts.body) {
@@ -186,8 +194,8 @@ class EmailService {
         const body = parsed.text || parsed.html || '(no body)'; // Prefer text
         const messageId = parsed.messageId || (0, uuid_1.v4)();
         const inReplyTo = parsed.inReplyTo;
-        // Get or create lead
-        let lead = await this.getOrCreateLead(email, name);
+        // Get or create lead scoped to this user
+        let lead = await this.getOrCreateLead(userId, email, name);
         // Update name if we have a better one now (and the old one was just the email prefix)
         if (from.name && lead.name === email.split('@')[0] && from.name !== lead.name) {
             console.log(`Updating lead name from "${lead.name}" to "${from.name}"`);
@@ -208,30 +216,30 @@ class EmailService {
         ]);
         console.log(`Stored inbound message from ${email}`);
         // Track analytics event for reply received
-        await tracker_1.analyticsTracker.track('reply_received', lead.id);
+        await tracker_1.analyticsTracker.track('reply_received', userId, lead.id);
         return lead;
     }
     /**
-     * Get or create lead by email
+     * Get or create lead by email scoped to user
      */
-    async getOrCreateLead(email, name) {
-        const existing = await database_1.default.query('SELECT * FROM leads WHERE email = $1', [email]);
+    async getOrCreateLead(userId, email, name) {
+        const existing = await database_1.default.query('SELECT * FROM leads WHERE email = $1 AND user_id = $2', [email, userId]);
         if (existing.rows.length > 0) {
             return this.rowToLead(existing.rows[0]);
         }
         const leadId = (0, uuid_1.v4)();
-        await database_1.default.query(`INSERT INTO leads (id, email, name, source, status, last_contact_at, created_at)
-             VALUES ($1, $2, $3, 'email', 'new', datetime('now'), datetime('now'))`, [leadId, email, name || email.split('@')[0]]);
+        await database_1.default.query(`INSERT INTO leads (id, user_id, email, name, source, status, last_contact_at, created_at)
+             VALUES ($1, $2, $3, $4, 'email', 'new', datetime('now'), datetime('now'))`, [leadId, userId, email, name || email.split('@')[0]]);
         const newLead = await database_1.default.query('SELECT * FROM leads WHERE id = $1', [leadId]);
         return this.rowToLead(newLead.rows[0]);
     }
     /**
-     * Get the appropriate transporter (OAuth or SMTP)
+     * Get the appropriate transporter (OAuth or SMTP) for a specific user
      */
-    async getTransporter() {
-        // 1. Try to find a user with Google tokens OR App Password
+    async getTransporter(userId) {
+        // 1. Find user config
         try {
-            const res = await database_1.default.query('SELECT email, access_token, refresh_token, google_id, google_app_password, google_account_email FROM users LIMIT 1');
+            const res = await database_1.default.query('SELECT email, access_token, refresh_token, google_id, google_app_password, google_account_email FROM users WHERE id = $1', [userId]);
             if (res.rows.length > 0) {
                 const user = res.rows[0];
                 // A. Try App Password (Preferred for IMAP/SMTP simplicity)
@@ -287,23 +295,23 @@ class EmailService {
     /**
      * Send email via SMTP
      */
-    async sendEmail(lead, subject, body, threadInfo, attachments // Support attachments (like ICS)
+    async sendEmail(userId, lead, subject, body, threadInfo, attachments // Support attachments (like ICS)
     ) {
         if (!config_1.config.enableRealEmail) {
             console.log(`[MOCK EMAIL] To: ${lead.email}, Subject: ${subject}`);
-            await tracker_1.analyticsTracker.track('email_sent', lead.id);
+            await tracker_1.analyticsTracker.track('email_sent', userId, lead.id);
             return { sent: true, messageId: `mock-${(0, uuid_1.v4)()}` };
         }
         try {
-            const transporter = await this.getTransporter();
+            const transporter = await this.getTransporter(userId);
             if (!transporter) {
-                console.error('No email transport configured (neither OAuth nor SMTP)');
+                console.error(`No email transport configured for user ${userId}`);
                 return { sent: false, reason: 'No email transport configured' };
             }
             // Retrieve Sender config dynamically to ensure 'From:' matches the connected account
-            const res = await database_1.default.query('SELECT email, google_account_email FROM users LIMIT 1');
+            const res = await database_1.default.query('SELECT email, google_account_email FROM users WHERE id = $1', [userId]);
             const user = res.rows[0] || {};
-            const senderEmail = user.google_account_email || config_1.config.gmailUserEmail || config_1.config.smtp.user;
+            const senderEmail = user.google_account_email || user.email;
             const mailOptions = {
                 from: `"${config_1.config.businessName}" <${senderEmail}>`,
                 to: lead.email,
@@ -334,7 +342,7 @@ class EmailService {
             ]);
             console.log(`Email sent to ${lead.email}, message ID: ${sentMessageId}`);
             // Track analytics event
-            await tracker_1.analyticsTracker.track('email_sent', lead.id);
+            await tracker_1.analyticsTracker.track('email_sent', userId, lead.id);
             return { sent: true, messageId: sentMessageId };
         }
         catch (error) {
@@ -394,6 +402,7 @@ class EmailService {
     rowToLead(row) {
         return {
             id: row.id,
+            user_id: row.user_id,
             email: row.email,
             name: row.name,
             phone: row.phone,

@@ -5,6 +5,7 @@ export type LeadSource = 'email' | 'webform' | 'outbound_campaign' | 'web_scrape
 export type LeadStatus = 'new' | 'qualifying' | 'awaiting_response' | 'ready_to_book' | 'booked' | 'escalated' | 'closed';
 export interface Lead {
     id: string;
+    user_id: string;
     email: string;
     name?: string;
     phone?: string;

@@ -12,16 +12,17 @@ const router = (0, express_1.Router)();
  */
 router.post('/start', async (req, res) => {
     try {
+        const userId = req.user?.id;
         const { niche, dailyLimit } = req.body;
         if (!niche) {
             return res.status(400).json({ error: 'Niche is required' });
         }
         const limit = parseInt(dailyLimit) || 50;
-        await campaign_runner_1.default.start(niche, limit);
+        await campaign_runner_1.default.start(userId, niche, limit);
         res.json({
             success: true,
             message: `Campaign started for "${niche}"`,
-            stats: await campaign_runner_1.default.getStats()
+            stats: await campaign_runner_1.default.getStats(userId)
         });
     }
     catch (error) {
@@ -34,11 +35,12 @@ router.post('/start', async (req, res) => {
  * Stop the current campaign
  */
 router.post('/stop', async (req, res) => {
-    await campaign_runner_1.default.stop();
+    const userId = req.user?.id;
+    await campaign_runner_1.default.stop(userId);
     res.json({
         success: true,
         message: 'Campaign stopped',
-        stats: await campaign_runner_1.default.getStats()
+        stats: await campaign_runner_1.default.getStats(userId)
     });
 });
 /**
@@ -46,7 +48,8 @@ router.post('/stop', async (req, res) => {
  * Get current campaign statistics
  */
 router.get('/stats', async (req, res) => {
-    res.json(await campaign_runner_1.default.getStats());
+    const userId = req.user?.id;
+    res.json(await campaign_runner_1.default.getStats(userId));
 });
 exports.default = router;
 //# sourceMappingURL=campaigns.js.map

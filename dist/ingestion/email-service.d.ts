@@ -7,25 +7,29 @@ export declare class EmailService {
     private transporter;
     constructor();
     /**
-     * Poll IMAP inbox for new unread messages
+     * Poll ALL IMAP inboxes for new unread messages
      */
-    pollInbox(): Promise<Lead[]>;
+    pollAllInboxes(): Promise<Lead[]>;
+    /**
+     * Poll a specific user's IMAP inbox
+     */
+    private pollUserInbox;
     /**
      * Process a single IMAP message
      */
     private processMessage;
     /**
-     * Get or create lead by email
+     * Get or create lead by email scoped to user
      */
     private getOrCreateLead;
     /**
-     * Get the appropriate transporter (OAuth or SMTP)
+     * Get the appropriate transporter (OAuth or SMTP) for a specific user
      */
     private getTransporter;
     /**
      * Send email via SMTP
      */
-    sendEmail(lead: Lead, subject: string, body: string, threadInfo?: EmailThreadInfo, attachments?: any[]): Promise<{
+    sendEmail(userId: string, lead: Lead, subject: string, body: string, threadInfo?: EmailThreadInfo, attachments?: any[]): Promise<{
         sent: boolean;
         messageId?: string;
         reason?: string;

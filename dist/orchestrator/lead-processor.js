@@ -111,7 +111,7 @@ class LeadProcessor {
             }
         }
         const subject = threadInfo ? `Re: ${threadInfo.subject}` : `Re: Inquiry about ${config_1.config.businessName}`;
-        const result = await email_service_1.default.sendEmail(lead, subject, decision.message_draft, threadInfo, attachments);
+        const result = await email_service_1.default.sendEmail(lead.user_id, lead, subject, decision.message_draft, threadInfo, attachments);
         if (result.sent) {
             console.log(`✅ Response sent to ${lead.email}`);
             // Log action
@@ -168,6 +168,7 @@ class LeadProcessor {
     rowToLead(row) {
         return {
             id: row.id,
+            user_id: row.user_id,
             email: row.email,
             name: row.name,
             phone: row.phone,

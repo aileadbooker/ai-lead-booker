@@ -75,6 +75,7 @@ export class LeadGenerator {
 
                 newLeads.push({
                     id: leadId,
+                    user_id: '',
                     email,
                     name: data.company,
                     company: data.company,

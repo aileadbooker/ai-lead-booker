@@ -66,6 +66,9 @@ router.post('/email-config', auth_1.isAuthenticated, async (req, res) => {
                     user: googleEmail.trim(), // Use the explicitly provided address!
                     pass: appPassword.trim(),
                 },
+                connectionTimeout: 10000, // 10 seconds max connection wait
+                greetingTimeout: 10000,
+                socketTimeout: 10000,
             });
             await testTransporter.verify();
             console.log(`✅ App Password successfully authenticated for ${googleEmail}.`);
@@ -73,7 +76,7 @@ router.post('/email-config', auth_1.isAuthenticated, async (req, res) => {
         catch (authError) {
             console.error(`❌ Authentication failed:`, authError.message);
             return res.status(401).json({
-                error: 'Authentication failed. Google rejected this password. Make sure you typed the exact Google Account Email this password was generated under.'
+                error: `Authentication failed. Google said: "${authError.message}". Make sure you typed the exact Google Account Email this password was generated under, and that you do not have any invisible characters copied. You may also need to visit https://accounts.google.com/DisplayUnlockCaptcha from your browser to allow the connection.`
             });
         }
         // Save to DB

@@ -1,47 +1,42 @@
 /**
  * Campaign Runner
- * Manages outbound campaigns, throttling, and sending
+ * Manages outbound campaigns, throttling, and sending for all users
  */
 declare class CampaignRunner {
-    private isRunning;
     private intervalId;
     private llmService;
-    private status;
-    private currentNiche;
-    private dailyLimit;
-    private sentToday;
-    private lastRunDate;
+    private isProcessingQueue;
     constructor();
     /**
-     * Initialize campaign runner from DB state
+     * Initialize master campaign runner
      */
     init(): Promise<void>;
     /**
-     * Start the campaign
+     * Start the campaign for a specific user
      */
-    start(niche: string, dailyLimit: number): Promise<void>;
+    start(userId: string, niche: string, dailyLimit: number): Promise<void>;
     /**
-     * Stop/Pause the campaign
+     * Stop/Pause the campaign for a specific user
      */
-    stop(): Promise<void>;
+    stop(userId: string): Promise<void>;
     /**
-     * Get current stats
+     * Get current stats for a specific user
      */
-    /**
-     * Get current stats
-     */
-    getStats(): Promise<{
-        status: "idle" | "running" | "paused";
+    getStats(userId: string): Promise<{
+        status: string;
         niche: string;
         sentToday: number;
         dailyLimit: number;
         active: boolean;
     }>;
-    private isProcessingQueue;
     /**
-     * Main processing loop
+     * Main processing loop across all users
      */
-    private processQueue;
+    private processAllQueues;
+    /**
+     * Process outreach for a single user
+     */
+    private processUserQueue;
     /**
      * Send the first email to a lead
      */

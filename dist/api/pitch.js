@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_PITCH = void 0;
 const express_1 = require("express");
 const database_1 = __importDefault(require("../config/database"));
+const pitch_manager_1 = require("../utils/pitch-manager");
 const router = (0, express_1.Router)();
 exports.DEFAULT_PITCH = {
     initial_pitch: `Hey {{name}}! 👋
@@ -53,7 +54,8 @@ Looking forward to speaking with you! 📞`,
  */
 router.get('/pitch', async (req, res) => {
     try {
-        const result = await database_1.default.query(`SELECT * FROM custom_pitch WHERE id = 'default'`);
+        const userId = req.user?.id;
+        const result = await database_1.default.query(`SELECT * FROM custom_pitch WHERE user_id = $1`, [userId]);
         if (result.rows.length === 0) {
             return res.json(exports.DEFAULT_PITCH);
         }
@@ -70,18 +72,21 @@ router.get('/pitch', async (req, res) => {
  */
 router.put('/pitch', async (req, res) => {
     try {
+        const userId = req.user?.id;
         const { initial_pitch, yes_response, no_response, yes_2_response, no_2_response } = req.body;
         // Validate required fields
         if (!initial_pitch || !yes_response || !no_response) {
             return res.status(400).json({ error: 'All pitch fields are required' });
         }
-        await database_1.default.query(`INSERT INTO custom_pitch (id, initial_pitch, yes_response, no_response, updated_at)
-             VALUES ('default', $1, $2, $3, datetime('now'))
-             ON CONFLICT(id) DO UPDATE SET
+        await database_1.default.query(`INSERT INTO custom_pitch (id, user_id, initial_pitch, yes_response, no_response, updated_at)
+             VALUES ($1, $2, $3, $4, $5, datetime('now'))
+             ON CONFLICT(user_id) DO UPDATE SET
                  initial_pitch = excluded.initial_pitch,
                  yes_response = excluded.yes_response,
                  no_response = excluded.no_response,
-                 updated_at = excluded.updated_at`, [initial_pitch, yes_response, no_response]);
+                 updated_at = excluded.updated_at`, [require('crypto').randomUUID(), userId, initial_pitch, yes_response, no_response]);
+        // Clear the RAM cache so campaign runner picks up these new edits immediately
+        pitch_manager_1.PitchManager.clearCache(userId);
         res.json({ success: true, message: 'Pitch updated successfully' });
     }
     catch (error) {
@@ -95,17 +100,20 @@ router.put('/pitch', async (req, res) => {
  */
 router.post('/pitch/reset', async (req, res) => {
     try {
-        console.log('[DEBUG] POST /api/pitch/reset triggered');
-        await database_1.default.query(`INSERT INTO custom_pitch (id, initial_pitch, yes_response, no_response, yes_2_response, no_2_response, updated_at)
-             VALUES ('default', $1, $2, $3, $4, $5, datetime('now'))
-             ON CONFLICT(id) DO UPDATE SET
+        const userId = req.user?.id;
+        console.log(`[DEBUG] POST /api/pitch/reset triggered by user ${userId}`);
+        await database_1.default.query(`INSERT INTO custom_pitch (id, user_id, initial_pitch, yes_response, no_response, yes_2_response, no_2_response, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, datetime('now'))
+             ON CONFLICT(user_id) DO UPDATE SET
                  initial_pitch = excluded.initial_pitch,
                  yes_response = excluded.yes_response,
                  no_response = excluded.no_response,
                  yes_2_response = excluded.yes_2_response,
                  no_2_response = excluded.no_2_response,
-                 updated_at = excluded.updated_at`, [exports.DEFAULT_PITCH.initial_pitch, exports.DEFAULT_PITCH.yes_response, exports.DEFAULT_PITCH.no_response,
+                 updated_at = excluded.updated_at`, [require('crypto').randomUUID(), userId, exports.DEFAULT_PITCH.initial_pitch, exports.DEFAULT_PITCH.yes_response, exports.DEFAULT_PITCH.no_response,
             exports.DEFAULT_PITCH.yes_2_response, exports.DEFAULT_PITCH.no_2_response]);
+        // Clear the cache so campaign runner reverts to defaults immediately
+        pitch_manager_1.PitchManager.clearCache(userId);
         res.json({ success: true, message: 'Reset to AI-recommended defaults', pitch: exports.DEFAULT_PITCH });
     }
     catch (error) {

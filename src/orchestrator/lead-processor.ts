@@ -130,6 +130,7 @@ export class LeadProcessor {
         const subject = threadInfo ? `Re: ${threadInfo.subject}` : `Re: Inquiry about ${config.businessName}`;
 
         const result = await emailService.sendEmail(
+            lead.user_id,
             lead,
             subject,
             decision.message_draft,
@@ -207,6 +208,7 @@ export class LeadProcessor {
     private rowToLead(row: any): Lead {
         return {
             id: row.id,
+            user_id: row.user_id,
             email: row.email,
             name: row.name,
             phone: row.phone,

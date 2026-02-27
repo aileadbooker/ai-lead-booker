@@ -12,16 +12,16 @@ class PitchManager {
     /**
      * Get custom pitch configuration
      */
-    static async getPitch() {
+    static async getPitch(userId) {
         try {
             // Use cached version if available (valid for 5 minutes)
-            if (this.cachedPitch) {
-                return this.cachedPitch;
+            if (this.cachedPitches.has(userId)) {
+                return this.cachedPitches.get(userId);
             }
-            const result = await database_1.default.query(`SELECT * FROM custom_pitch WHERE id = 'default'`);
+            const result = await database_1.default.query(`SELECT * FROM custom_pitch WHERE user_id = $1`, [userId]);
             if (result.rows.length > 0) {
-                this.cachedPitch = result.rows[0];
-                return this.cachedPitch;
+                this.cachedPitches.set(userId, result.rows[0]);
+                return result.rows[0];
             }
             // Return defaults if not found
             return this.getDefaults();
@@ -92,8 +92,13 @@ Wishing you all the best with your business! 🚀`
     /**
      * Clear cache (call this after pitch updates)
      */
-    static clearCache() {
-        this.cachedPitch = null;
+    static clearCache(userId) {
+        if (userId) {
+            this.cachedPitches.delete(userId);
+        }
+        else {
+            this.cachedPitches.clear();
+        }
     }
     /**
      * Replace {{name}} placeholder
@@ -103,5 +108,5 @@ Wishing you all the best with your business! 🚀`
     }
 }
 exports.PitchManager = PitchManager;
-PitchManager.cachedPitch = null;
+PitchManager.cachedPitches = new Map();
 //# sourceMappingURL=pitch-manager.js.map

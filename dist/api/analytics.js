@@ -9,6 +9,7 @@ const router = (0, express_1.Router)();
  */
 router.get('/analytics', async (req, res) => {
     try {
+        const userId = req.user?.id;
         const { period = 'month' } = req.query;
         // Calculate date range based on period
         let days = 30;
@@ -38,10 +39,10 @@ router.get('/analytics', async (req, res) => {
             startDate = d;
         }
         const [summary, funnel, timeline, topLeads] = await Promise.all([
-            tracker_1.analyticsTracker.getSummary(startDate.toISOString()),
-            tracker_1.analyticsTracker.getConversionFunnel(startDate.toISOString()),
-            tracker_1.analyticsTracker.getActivityTimeline(days),
-            tracker_1.analyticsTracker.getTopLeads(10),
+            tracker_1.analyticsTracker.getSummary(userId, startDate.toISOString()),
+            tracker_1.analyticsTracker.getConversionFunnel(userId, startDate.toISOString()),
+            tracker_1.analyticsTracker.getActivityTimeline(userId, days),
+            tracker_1.analyticsTracker.getTopLeads(userId, 10),
         ]);
         res.json({
             summary,
@@ -61,6 +62,7 @@ router.get('/analytics', async (req, res) => {
  */
 router.get('/summary', async (req, res) => {
     try {
+        const userId = req.user?.id;
         const { period = 'today' } = req.query;
         // Calculate date range
         let days = 1;
@@ -79,10 +81,10 @@ router.get('/summary', async (req, res) => {
             d.setDate(d.getDate() - days);
             startDate = d;
         }
-        const summary = await tracker_1.analyticsTracker.getSummary(startDate.toISOString());
-        const timeline = await tracker_1.analyticsTracker.getActivityTimeline(days);
+        const summary = await tracker_1.analyticsTracker.getSummary(userId, startDate.toISOString());
+        const timeline = await tracker_1.analyticsTracker.getActivityTimeline(userId, days);
         // Get hot leads (those who said Y recently)
-        const hotLeads = await tracker_1.analyticsTracker.getTopLeads(5);
+        const hotLeads = await tracker_1.analyticsTracker.getTopLeads(userId, 5);
         res.json({
             period,
             summary,

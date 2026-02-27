@@ -70,4 +70,42 @@ router.get('/me', (req: Request, res: Response) => {
     res.status(401).json({ authenticated: false });
 });
 
+/**
+ * GET /api/dev-login
+ * Developer bypass route for local testing (Skips Google Auth wall)
+ */
+router.get('/dev-login', async (req: any, res: Response, next) => {
+    if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ error: 'Forbidden in production' });
+    }
+
+    try {
+        const db = require('../config/database').default;
+        const result = await db.query('SELECT * FROM users LIMIT 1');
+
+        let user = result.rows[0];
+
+        if (!user) {
+            const devId = `dev_${Date.now()}`;
+            const devEmail = 'dev.tester@example.com';
+            await db.query(
+                `INSERT INTO users (id, email, name, has_paid, onboarding_completed, created_at, updated_at) 
+                 VALUES ($1, $2, 'Developer Tester', 1, 1, datetime('now'), datetime('now'))`,
+                [devId, devEmail]
+            );
+            const refetch = await db.query('SELECT * FROM users WHERE id = $1', [devId]);
+            user = refetch.rows[0];
+        }
+
+        req.login(user, (err: any) => {
+            if (err) return next(err);
+            console.log(`✅ [DEV BACKDOOR] Successfully bypassed OAuth. Logged in as: ${user.email}`);
+            return res.redirect('/dashboard');
+        });
+    } catch (error) {
+        console.error('Local bypass failed:', error);
+        res.status(500).send('Local login bypass failed.');
+    }
+});
+
 export default router;

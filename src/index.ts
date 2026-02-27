@@ -61,7 +61,7 @@ class EmailMonitor {
         try {
             console.log('\n--- Polling inbox ---');
 
-            const newLeads = await emailService.pollInbox();
+            const newLeads = await emailService.pollAllInboxes();
 
             if (newLeads.length === 0) {
                 console.log('No new leads');

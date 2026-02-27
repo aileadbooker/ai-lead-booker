@@ -99,6 +99,7 @@ class LeadGenerator {
                      VALUES ($1, $2, $3, $4, 'web_scrape', 'new', datetime('now'), datetime('now'))`, [leadId, email, data.company, data.company]);
                 newLeads.push({
                     id: leadId,
+                    user_id: '',
                     email,
                     name: data.company,
                     company: data.company,

@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE TABLE IF NOT EXISTS leads (
   id TEXT PRIMARY KEY, -- Using UUID strings
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   email TEXT UNIQUE NOT NULL,
   name TEXT,
   phone TEXT,
@@ -33,8 +34,9 @@ CREATE TABLE IF NOT EXISTS leads (
 );
 
 CREATE INDEX IF NOT EXISTS idx_leads_next_action ON leads(next_action_at) WHERE opted_out = 0;
-CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
-CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(user_id, email);
+CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_leads_user ON leads(user_id);
 
 -- Email threading support
 CREATE TABLE IF NOT EXISTS messages (
@@ -112,6 +114,7 @@ CREATE INDEX IF NOT EXISTS idx_escalations_resolved ON escalations(resolved);
 -- Analytics Events Table
 CREATE TABLE IF NOT EXISTS analytics_events (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     event_type TEXT NOT NULL, -- 'email_sent', 'reply_received', 'interested', 'not_interested', 'booked', 'disqualified'
     lead_id TEXT,
     metadata TEXT, -- JSON string for additional data
@@ -126,6 +129,7 @@ CREATE INDEX IF NOT EXISTS idx_analytics_created_at ON analytics_events(created_
 -- Business configuration with shadow/live mode
 CREATE TABLE IF NOT EXISTS business_config (
   id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
   business_name TEXT NOT NULL,
   brand_voice TEXT,
   approval_mode TEXT NOT NULL DEFAULT 'shadow' CHECK (approval_mode IN ('shadow', 'live')),
@@ -183,6 +187,7 @@ CREATE INDEX IF NOT EXISTS idx_action_log_created ON action_log(created_at);
 -- Custom Pitch configuration
 CREATE TABLE IF NOT EXISTS custom_pitch (
   id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
   initial_pitch TEXT NOT NULL,
   yes_response TEXT NOT NULL,
   no_response TEXT NOT NULL,
@@ -195,6 +200,7 @@ CREATE TABLE IF NOT EXISTS custom_pitch (
 -- Campaign Configuration
 CREATE TABLE IF NOT EXISTS campaign_config (
   id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'running')),
   current_niche TEXT,
   daily_limit INTEGER DEFAULT 50,
