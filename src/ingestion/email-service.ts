@@ -255,8 +255,8 @@ export class EmailService {
 
                     return nodemailer.createTransport({
                         host: 'smtp.gmail.com',
-                        port: 465,
-                        secure: true, // Use Implicit SSL
+                        port: 587,
+                        secure: false, // Use STARTTLS
                         requireTLS: true,
                         family: 4,
                         auth: {
@@ -270,8 +270,8 @@ export class EmailService {
                 if (user.access_token) {
                     return nodemailer.createTransport({
                         host: 'smtp.gmail.com',
-                        port: 465,
-                        secure: true,
+                        port: 587,
+                        secure: false,
                         requireTLS: true,
                         family: 4,
                         auth: {

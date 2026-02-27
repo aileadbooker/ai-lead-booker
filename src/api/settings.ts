@@ -50,8 +50,8 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
         try {
             const testTransporter = nodemailer.createTransport({
                 host: 'smtp.gmail.com',
-                port: 465,
-                secure: true, // Use Implicit SSL (Port 465)
+                port: 587,
+                secure: false, // Use STARTTLS (Port 587)
                 requireTLS: true,
                 family: 4, // Force IPv4 routing (Bypass macOS ENETUNREACH error)
                 auth: {
