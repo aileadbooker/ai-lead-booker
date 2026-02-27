@@ -247,6 +247,11 @@ export class EmailService {
             if (res.rows.length > 0) {
                 const user = res.rows[0];
 
+                // Resolve IPv4 natively to bypass Alpine Linux DNS routing failures
+                const dns = require('dns');
+                const ipv4s = await dns.promises.resolve4('smtp.gmail.com');
+                const hostIp = ipv4s[0];
+
                 // A. Try App Password (Preferred for IMAP/SMTP simplicity)
                 // We use google_account_email if explicitly provided, otherwise fallback to their login email
                 if (user.google_app_password) {
@@ -254,7 +259,7 @@ export class EmailService {
                     console.log(`Using App Password for sender: ${senderEmail}`);
 
                     return nodemailer.createTransport({
-                        host: 'smtp.gmail.com',
+                        host: hostIp,
                         port: 587,
                         secure: false, // Use STARTTLS
                         requireTLS: true,
@@ -263,13 +268,14 @@ export class EmailService {
                             user: senderEmail,
                             pass: user.google_app_password,
                         },
+                        tls: { servername: 'smtp.gmail.com' },
                     } as any);
                 }
 
                 // B. Try OAuth (Fallback)
                 if (user.access_token) {
                     return nodemailer.createTransport({
-                        host: 'smtp.gmail.com',
+                        host: hostIp,
                         port: 587,
                         secure: false,
                         requireTLS: true,
@@ -282,6 +288,7 @@ export class EmailService {
                             refreshToken: user.refresh_token,
                             accessToken: user.access_token,
                         },
+                        tls: { servername: 'smtp.gmail.com' },
                     } as any);
                 }
             }

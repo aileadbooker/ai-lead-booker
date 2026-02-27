@@ -48,8 +48,12 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
         // VERIFICATION: Actually test the Google App Password BEFORE saving
         console.log(`Verifying Google App Password for explicit email account: ${googleEmail}...`);
         try {
+            const dns = require('dns');
+            const ipv4s = await dns.promises.resolve4('smtp.gmail.com');
+            const hostIp = ipv4s[0];
+
             const testTransporter = nodemailer.createTransport({
-                host: 'smtp.gmail.com',
+                host: hostIp,
                 port: 587,
                 secure: false, // Use STARTTLS (Port 587)
                 requireTLS: true,
@@ -58,6 +62,7 @@ router.post('/email-config', isAuthenticated, async (req: any, res) => {
                     user: googleEmail.trim(),
                     pass: appPassword.trim(),
                 },
+                tls: { servername: 'smtp.gmail.com' },
                 connectionTimeout: 15000, // 15 seconds max connection wait
                 greetingTimeout: 15000,
                 socketTimeout: 15000,
