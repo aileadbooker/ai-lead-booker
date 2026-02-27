@@ -1,5 +1,11 @@
 import express from 'express';
 import path from 'path';
+import dns from 'dns';
+
+// Force Node.js to prioritize IPv4 globally (Bypasses IPv6 ENETUNREACH on Railway)
+if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+}
 import { config, validateConfig } from './config';
 import db from './config/database';
 import emailService from './ingestion/email-service';
