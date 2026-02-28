@@ -51,10 +51,10 @@ Looking forward to speaking with you! 📞`,
  */
 router.get('/pitch', async (req: any, res: Response) => {
     try {
-        const userId = req.user?.id;
+        const workspaceId = (req as any).workspaceId;
         const result = await db.query(
-            `SELECT * FROM custom_pitch WHERE user_id = $1`,
-            [userId]
+            `SELECT * FROM custom_pitch WHERE workspace_id = $1`,
+            [workspaceId]
         );
 
         if (result.rows.length === 0) {
@@ -74,7 +74,7 @@ router.get('/pitch', async (req: any, res: Response) => {
  */
 router.put('/pitch', async (req: any, res: Response) => {
     try {
-        const userId = req.user?.id;
+        const workspaceId = (req as any).workspaceId;
         const { initial_pitch, yes_response, no_response, yes_2_response, no_2_response } = req.body;
 
         // Validate required fields
@@ -83,18 +83,18 @@ router.put('/pitch', async (req: any, res: Response) => {
         }
 
         await db.query(
-            `INSERT INTO custom_pitch (id, user_id, initial_pitch, yes_response, no_response, updated_at)
+            `INSERT INTO custom_pitch (id, workspace_id, initial_pitch, yes_response, no_response, updated_at)
              VALUES ($1, $2, $3, $4, $5, datetime('now'))
-             ON CONFLICT(user_id) DO UPDATE SET
+             ON CONFLICT(workspace_id) DO UPDATE SET
                  initial_pitch = excluded.initial_pitch,
                  yes_response = excluded.yes_response,
                  no_response = excluded.no_response,
                  updated_at = excluded.updated_at`,
-            [require('crypto').randomUUID(), userId, initial_pitch, yes_response, no_response]
+            [require('crypto').randomUUID(), workspaceId, initial_pitch, yes_response, no_response]
         );
 
         // Clear the RAM cache so campaign runner picks up these new edits immediately
-        PitchManager.clearCache(userId);
+        PitchManager.clearCache(workspaceId);
 
         res.json({ success: true, message: 'Pitch updated successfully' });
     } catch (error) {
@@ -109,25 +109,25 @@ router.put('/pitch', async (req: any, res: Response) => {
  */
 router.post('/pitch/reset', async (req: any, res: Response) => {
     try {
-        const userId = req.user?.id;
-        console.log(`[DEBUG] POST /api/pitch/reset triggered by user ${userId}`);
+        const workspaceId = (req as any).workspaceId;
+        console.log(`[DEBUG] POST /api/pitch/reset triggered by workspace ${workspaceId}`);
 
         await db.query(
-            `INSERT INTO custom_pitch (id, user_id, initial_pitch, yes_response, no_response, yes_2_response, no_2_response, updated_at)
+            `INSERT INTO custom_pitch (id, workspace_id, initial_pitch, yes_response, no_response, yes_2_response, no_2_response, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, datetime('now'))
-             ON CONFLICT(user_id) DO UPDATE SET
+             ON CONFLICT(workspace_id) DO UPDATE SET
                  initial_pitch = excluded.initial_pitch,
                  yes_response = excluded.yes_response,
                  no_response = excluded.no_response,
                  yes_2_response = excluded.yes_2_response,
                  no_2_response = excluded.no_2_response,
                  updated_at = excluded.updated_at`,
-            [require('crypto').randomUUID(), userId, DEFAULT_PITCH.initial_pitch, DEFAULT_PITCH.yes_response, DEFAULT_PITCH.no_response,
+            [require('crypto').randomUUID(), workspaceId, DEFAULT_PITCH.initial_pitch, DEFAULT_PITCH.yes_response, DEFAULT_PITCH.no_response,
             DEFAULT_PITCH.yes_2_response, DEFAULT_PITCH.no_2_response]
         );
 
         // Clear the cache so campaign runner reverts to defaults immediately
-        PitchManager.clearCache(userId);
+        PitchManager.clearCache(workspaceId);
 
         res.json({ success: true, message: 'Reset to AI-recommended defaults', pitch: DEFAULT_PITCH });
     } catch (error) {

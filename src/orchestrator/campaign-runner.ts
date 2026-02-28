@@ -62,7 +62,7 @@ class CampaignRunner {
         await db.query(
             `UPDATE campaign_config 
              SET status = 'idle', updated_at = datetime('now')
-             WHERE user_id = $1`,
+             WHERE workspace_id = $1`,
             [userId]
         );
     }
@@ -75,7 +75,7 @@ class CampaignRunner {
         let niche = '';
         let dailyLimit = 50;
 
-        const configResult = await db.query(`SELECT status, current_niche, daily_limit FROM campaign_config WHERE user_id = $1`, [userId]);
+        const configResult = await db.query(`SELECT status, current_niche, daily_limit FROM campaign_config WHERE workspace_id = $1`, [userId]);
         if (configResult.rows.length > 0) {
             const config = configResult.rows[0];
             status = config.status as string;
@@ -87,7 +87,7 @@ class CampaignRunner {
         const countResult = await db.query(
             `SELECT COUNT(*) as count FROM messages m
              JOIN leads l ON m.lead_id = l.id
-             WHERE l.user_id = $1 AND m.direction = 'outbound' 
+             WHERE l.workspace_id = $1 AND m.direction = 'outbound' 
              AND date(m.sent_at, 'localtime') = date('now', 'localtime')`,
             [userId]
         );
@@ -135,7 +135,7 @@ class CampaignRunner {
             const countResult = await db.query(
                 `SELECT COUNT(*) as count FROM messages m
                  JOIN leads l ON m.lead_id = l.id
-                 WHERE l.user_id = $1 AND m.direction = 'outbound' 
+                 WHERE l.workspace_id = $1 AND m.direction = 'outbound' 
                  AND date(m.sent_at, 'localtime') = date('now', 'localtime')`,
                 [userId]
             );
@@ -149,7 +149,7 @@ class CampaignRunner {
             // 2. Find "new" leads that haven't been contacted yet
             let leadsToContact = await db.query(
                 `SELECT * FROM leads 
-                 WHERE user_id = $1
+                 WHERE workspace_id = $1
                  AND (source = 'outbound_campaign' OR source = 'web_scrape')
                  AND status = 'new'
                  LIMIT 5`,
@@ -172,8 +172,8 @@ class CampaignRunner {
                 // Insert generated leads explicitly linking them to the user
                 for (const l of newLeads) {
                     await db.query(
-                        `INSERT INTO leads (id, user_id, email, name, company, source, status, created_at, updated_at, opted_out, followup_count)
-                         VALUES ($1, $2, $3, $4, $5, 'web_scrape', 'new', datetime('now'), datetime('now'), 0, 0)
+                        `INSERT INTO leads (id, workspace_id, user_id, email, name, company, source, status, created_at, updated_at, opted_out, followup_count)
+                         VALUES ($1, $2, 'legacy_admin', $3, $4, $5, 'web_scrape', 'new', datetime('now'), datetime('now'), 0, 0)
                          ON CONFLICT(email) DO NOTHING`,
                         [l.id, userId, l.email, l.name, l.company]
                     );
@@ -182,7 +182,7 @@ class CampaignRunner {
                 // Refetch leads explicitly matching user_id
                 leadsToContact = await db.query(
                     `SELECT * FROM leads 
-                     WHERE user_id = $1 
+                     WHERE workspace_id = $1 
                      AND (source = 'outbound_campaign' OR source = 'web_scrape')
                      AND status = 'new'
                      LIMIT 5`,
@@ -196,7 +196,7 @@ class CampaignRunner {
 
                 const lead: Lead = {
                     id: row.id,
-                    user_id: row.user_id,
+                    workspace_id: row.workspace_id,
                     email: row.email,
                     name: row.name,
                     company: row.company,
@@ -242,40 +242,22 @@ class CampaignRunner {
             );
 
             if (decision.message_draft) {
-                // 2. Send Email using the user's specific EmailService logic
-                const result = await emailService.sendEmail(
-                    userId,
-                    lead,
-                    'Question for you',
-                    this.formatEmailBody(decision.message_draft)
-                );
-
-                if (!result.sent) {
-                    console.error(`Failed to send email to ${lead.email}: ${result.reason}`);
-                    await db.query(
-                        `UPDATE leads SET status = 'failed' WHERE id = $1 AND user_id = $2`,
-                        [lead.id, userId]
-                    );
-                    return false;
-                }
-
-                // 3. Update Lead Status
+                // 3. Draft Message
+                const msgId = uuidv4();
                 await db.query(
-                    `UPDATE leads 
-                     SET status = 'contacted', 
-                         last_contact_at = datetime('now') 
-                     WHERE id = $1 AND user_id = $2`,
-                    [lead.id, userId]
+                    `INSERT INTO messages (id, workspace_id, lead_id, direction, message_id, in_reply_to, subject, body, sent_at)
+                     VALUES ($1, $2, $3, 'outbound', $4, NULL, $5, $6, datetime('now'))`,
+                    [msgId, userId, lead.id, uuidv4(), 'Question for you', this.formatEmailBody(decision.message_draft)]
                 );
 
-                // 4. Log Message
+                // 4. Queue the Job
                 await db.query(
-                    `INSERT INTO messages (id, lead_id, direction, message_id, in_reply_to, subject, body, sent_at)
-                     VALUES ($1, $2, 'outbound', $3, NULL, $4, $5, datetime('now'))`,
-                    [uuidv4(), lead.id, result.messageId || uuidv4(), 'Question for you', decision.message_draft]
+                    `INSERT INTO send_jobs (id, workspace_id, email_message_id, status, scheduled_at, attempt_count, created_at, updated_at)
+                     VALUES ($1, $2, $3, 'queued', datetime('now'), 0, datetime('now'), datetime('now'))`,
+                    [uuidv4(), userId, msgId]
                 );
 
-                console.log(`✅ Sent from ${userId} to ${lead.email}`);
+                console.log(`✅ Queued from ${userId} to ${lead.email}`);
                 return true;
             }
             return false;

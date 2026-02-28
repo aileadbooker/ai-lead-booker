@@ -13,6 +13,8 @@ import leadProcessor from './orchestrator/lead-processor';
 import followupScheduler from './orchestrator/scheduler';
 import dailyReporter from './orchestrator/daily-reporter';
 import campaignRunner from './orchestrator/campaign-runner';
+import queueWorker from './orchestrator/queue-worker';
+import reconciliationJob from './orchestrator/reconciliation-job';
 import analyticsRoutes from './api/analytics';
 import pitchRoutes from './api/pitch';
 import authRoutes from './api/auth';
@@ -20,7 +22,7 @@ import campaignRoutes from './api/campaigns';
 import leadsRoutes from './api/leads';
 import checkoutRoutes from './api/checkout';
 import settingsRouter from './api/settings';
-import { sessionConfig, isAuthenticated } from './middleware/auth';
+import { sessionConfig, isAuthenticated, requireWorkspace } from './middleware/auth';
 
 // ...
 
@@ -237,7 +239,7 @@ async function main() {
     });
 
     // Protect all other API routes
-    app.use('/api', isAuthenticated);
+    app.use('/api', isAuthenticated, requireWorkspace);
 
     // Campaign Routes
     app.use('/api/campaigns', campaignRoutes);
@@ -265,7 +267,8 @@ async function main() {
     // API: Get settings
     app.get('/api/settings', async (req, res) => {
         try {
-            const result = await db.query('SELECT * FROM business_config LIMIT 1');
+            const workspaceId = (req as any).workspaceId;
+            const result = await db.query('SELECT * FROM business_config WHERE workspace_id = $1 LIMIT 1', [workspaceId]);
             res.json(result.rows[0] || {});
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -280,17 +283,23 @@ async function main() {
     const emailMonitor = new EmailMonitor();
     emailMonitor.start(60000); // Poll every 60 seconds
 
-    // Initialize campaign runner (resumes if active in DB)
+    // Initialize campaign runner & queue worker
     await campaignRunner.init();
+    queueWorker.start(5000); // 5 second polling interval
 
     // 5. Start follow-up scheduler
     followupScheduler.start(60000); // Check for follow-ups every 60 seconds
+
+    // 6. Start nightly reconciliation
+    reconciliationJob.start();
 
     // 6. Graceful shutdown
     process.on('SIGTERM', async () => {
         console.log('\nSIGTERM received, shutting down gracefully...');
         emailMonitor.stop();
         followupScheduler.stop();
+        queueWorker.stop();
+        reconciliationJob.stop();
         await db.close();
         process.exit(0);
     });
@@ -299,6 +308,8 @@ async function main() {
         console.log('\nSIGINT received, shutting down gracefully...');
         emailMonitor.stop();
         followupScheduler.stop();
+        queueWorker.stop();
+        reconciliationJob.stop();
         await db.close();
         process.exit(0);
     });

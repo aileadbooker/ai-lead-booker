@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import session from 'express-session';
 import { config } from '../config';
+import db from '../config/database';
 
 // Extend Session Data
 declare module 'express-session' {
@@ -75,4 +76,36 @@ export const isAuthenticated = (req: Request, res: Response, next: NextFunction)
 
     // Page request: Redirect to landing
     return res.redirect('/');
+};
+
+/**
+ * Middleware to ensure request is scoped to a valid workspace
+ */
+export const requireWorkspace = async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const user = req.user as any;
+
+    // Check if the request specifies a workspace in headers (for multi-workspace) or fallback to default
+    const requestedWorkspaceId = req.headers['x-workspace-id'] || user.default_workspace_id;
+
+    if (!requestedWorkspaceId) {
+        return res.status(403).json({ error: 'No workspace assigned' });
+    }
+
+    try {
+        // Validate user has access to this workspace
+        const link = await db.query('SELECT role FROM workspace_users WHERE workspace_id = $1 AND user_id = $2', [requestedWorkspaceId, user.id]);
+        if (link.rows.length === 0) {
+            return res.status(403).json({ error: 'Access denied to this workspace' });
+        }
+
+        (req as any).workspaceId = requestedWorkspaceId;
+        (req as any).workspaceRole = link.rows[0].role;
+        next();
+    } catch (err) {
+        console.error('requireWorkspace error:', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
 };

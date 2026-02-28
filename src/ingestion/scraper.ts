@@ -1,70 +1,66 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { search, SafeSearchType } from 'duck-duck-scrape';
 
 /**
- * Robust Web Scraper 🕵️‍♂️
- * Rotates User-Agents and tries multiple search engines.
- * Feature Update: Deep-Crawling and Search Pagination for 10x Volume.
+ * Stage 1 & 2: Search & Extract
+ * Uses DuckDuckScrape to bypass Google/Bing anti-bot protection and extracts emails + text.
  */
 export class WebScraper {
     private readonly USER_AGENTS = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
     ];
 
     /**
-     * Search for leads
+     * Search for leads using DuckDuckGo
      */
-    async findLeads(niche: string, maxResults: number = 5, page: number = 1): Promise<Array<{ company: string, url: string, email?: string, source: string }>> {
-        console.log(`🔎 Scraping for: "${niche}" (Page ${page})...`);
+    async findLeads(niche: string, maxResults: number = 10, offset: number = 0): Promise<Array<{ company: string, url: string, email?: string, textContent: string, source: string }>> {
+        console.log(`🔎 Scraping DDG for: "${niche}" (Offset ${offset})...`);
 
-        let results: Array<{ title: string, url: string }> = [];
+        let searchResults: Array<{ title: string, url: string }> = [];
 
-        // 1. Try Yahoo (Often easier to scrape)
         try {
-            console.log(`Trying Yahoo Search (Page ${page})...`);
-            results = await this.searchYahoo(niche, maxResults * 2, page);
-        } catch (e) { console.error('Yahoo failed', e); }
+            // DuckDuckScrape does not use traditional "pages" but rather handles scrolling/fetching internally or we can limit it.
+            // But we can just use the natural query and take what we need. For deep pagination we modify the query slightly or rely on the engine.
+            const ddgResults = await search(niche, {
+                safeSearch: SafeSearchType.STRICT
+            });
 
-        // 2. Fallback to Google if Yahoo fails
-        if (results.length === 0) {
-            console.log(`⚠️ Yahoo returned 0 results. Trying Google (Page ${page})...`);
-            try {
-                results = await this.searchGoogle(niche, maxResults * 2, page);
-            } catch (e) { console.error('Google failed', e); }
+            if (ddgResults.results) {
+                // Manually slice to simulate pagination offset
+                const sliced = ddgResults.results.slice(offset, offset + maxResults + 10);
+                for (const r of sliced) {
+                    if (r.url && r.url.startsWith('http') && !this.isBlacklisted(r.url)) {
+                        searchResults.push({ title: r.title, url: r.url });
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('DuckDuckScrape failed:', error);
         }
 
-        // 3. Fallback to Bing
-        if (results.length === 0) {
-            console.log(`⚠️ Google returned 0 results. Trying Bing (Page ${page})...`);
-            try {
-                results = await this.searchBing(niche, maxResults * 2, page);
-            } catch (e) { console.error('Bing failed', e); }
-        }
+        const leads: Array<{ company: string, url: string, email?: string, textContent: string, source: string }> = [];
+        console.log(`Found ${searchResults.length} potential websites. Deep-scanning for emails and business context...`);
 
-        const leads: Array<{ company: string, url: string, email?: string, source: string }> = [];
-        console.log(`Found ${results.length} potential websites on page ${page}. Deep-scanning for emails...`);
+        const MAX_CONCURRENT = 4;
 
-        // Pool requests for speed while scraping actual websites
-        const MAX_CONCURRENT = 3;
-
-        for (let i = 0; i < results.length; i += MAX_CONCURRENT) {
-            const batch = results.slice(i, i + MAX_CONCURRENT);
+        for (let i = 0; i < searchResults.length; i += MAX_CONCURRENT) {
+            const batch = searchResults.slice(i, i + MAX_CONCURRENT);
             const batchPromises = batch.map(async (result) => {
                 const url = result.url;
-                if (this.isBlacklisted(url)) return null;
 
                 try {
-                    const email = await this.deepExtractEmail(url);
-                    if (email) {
+                    const extracted = await this.deepExtract(url);
+                    if (extracted.email) {
                         const cleanName = this.extractCleanName(url, result.title);
-                        console.log(`✅ Found lead: ${email} (${url}) -> Name: ${cleanName}`);
+                        console.log(`   ✅ Found lead: ${extracted.email} (${url})`);
                         return {
                             company: cleanName,
                             url: url,
-                            email: email,
+                            email: extracted.email,
+                            textContent: extracted.text,
                             source: 'web_scrape'
                         };
                     }
@@ -87,9 +83,8 @@ export class WebScraper {
     }
 
     private isBlacklisted(url: string): boolean {
-        // Significantly expanded blacklist to filter out directories and focus on small business owners' actual core websites.
-        const blacklist = ['yelp.com', 'facebook.com', 'linkedin.com', 'yellowpages.com', 'instagram.com', 'twitter.com', 'youtube.com', 'google.com', 'yahoo.com', 'bing.com', 'bbb.org', 'houzz.com', 'angi.com', 'thumbtack.com', 'homeadvisor.com', 'porch.com', 'expertise.com', 'mapquest.com', 'superpages.com', 'yellowbook.com', 'manta.com', 'chamberofcommerce.com'];
-        return blacklist.some(domain => url.includes(domain));
+        const blacklist = ['yelp.com', 'facebook.com', 'linkedin.com', 'yellowpages.com', 'instagram.com', 'twitter.com', 'youtube.com', 'google.com', 'yahoo.com', 'bing.com', 'bbb.org', 'houzz.com', 'angi.com', 'thumbtack.com', 'homeadvisor.com', 'porch.com', 'expertise.com', 'mapquest.com', 'superpages.com', 'yellowbook.com', 'manta.com', 'chamberofcommerce.com', 'wikipedia.org'];
+        return blacklist.some(domain => url.toLowerCase().includes(domain));
     }
 
     private extractCleanName(url: string, rawTitle: string): string {
@@ -109,109 +104,33 @@ export class WebScraper {
         }
     }
 
-    private async searchYahoo(query: string, limit: number, page: number): Promise<Array<{ title: string, url: string }>> {
-        try {
-            const ua = this.USER_AGENTS[Math.floor(Math.random() * this.USER_AGENTS.length)];
-            const b = (page - 1) * 10 + 1;
-            const response = await axios.get(`https://search.yahoo.com/search?p=${encodeURIComponent(query)}&n=${limit + 5}&b=${b}`, {
-                headers: { 'User-Agent': ua }
-            });
-
-            const $ = cheerio.load(response.data);
-            const results: Array<{ title: string, url: string }> = [];
-
-            $('h3.title a').each((i, element) => {
-                const title = $(element).text();
-                let url = $(element).attr('href');
-                if (url && url.includes('RU=')) {
-                    try {
-                        const match = url.match(/RU=([^/]+)/);
-                        if (match && match[1]) url = decodeURIComponent(match[1]);
-                    } catch (e) { }
-                }
-                if (title && url && url.startsWith('http')) {
-                    results.push({ title, url });
-                }
-            });
-            return results.slice(0, limit);
-        } catch (error) { return []; }
-    }
-
-    private async searchGoogle(query: string, limit: number, page: number): Promise<Array<{ title: string, url: string }>> {
-        try {
-            const ua = this.USER_AGENTS[Math.floor(Math.random() * this.USER_AGENTS.length)];
-            const start = (page - 1) * 10;
-            const response = await axios.get(`https://www.google.com/search?q=${encodeURIComponent(query)}&num=${limit + 5}&start=${start}`, {
-                headers: {
-                    'User-Agent': ua,
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
-                }
-            });
-
-            const $ = cheerio.load(response.data);
-            const results: Array<{ title: string, url: string }> = [];
-
-            $('div.g').each((i, element) => {
-                const title = $(element).find('h3').first().text();
-                const url = $(element).find('a').first().attr('href');
-                if (title && url && url.startsWith('http')) {
-                    results.push({ title, url });
-                }
-            });
-            return results.slice(0, limit);
-        } catch (error) { return []; }
-    }
-
-    private async searchBing(query: string, limit: number, page: number): Promise<Array<{ title: string, url: string }>> {
-        try {
-            const ua = this.USER_AGENTS[Math.floor(Math.random() * this.USER_AGENTS.length)];
-            const first = (page - 1) * 10 + 1;
-            const response = await axios.get(`https://www.bing.com/search?q=${encodeURIComponent(query)}&count=${limit + 5}&first=${first}`, {
-                headers: {
-                    'User-Agent': ua,
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
-                }
-            });
-
-            const $ = cheerio.load(response.data);
-            const results: Array<{ title: string, url: string }> = [];
-
-            $('li.b_algo h2 a').each((i, element) => {
-                const title = $(element).text();
-                const url = $(element).attr('href');
-                if (title && url && url.startsWith('http')) {
-                    results.push({ title, url });
-                }
-            });
-            return results.slice(0, limit);
-        } catch (error) { return []; }
-    }
-
     /**
      * Deep crawl: Check homepage first, then navigate into subpages like a human researcher.
+     * Extracts BOTH email and text content for LLM verification.
      */
-    private async deepExtractEmail(baseUrl: string): Promise<string | null> {
-        let email = await this.fetchAndExtractEmail(baseUrl);
-        if (email) return email;
+    private async deepExtract(baseUrl: string): Promise<{ email: string | null, text: string }> {
+        let extracted = await this.fetchAndExtract(baseUrl);
+        if (extracted.email) return extracted;
 
         const base = baseUrl.replace(/\/$/, '');
         const subpages = ['/contact', '/contact-us', '/about', '/about-us'];
 
         for (const sub of subpages) {
-            console.log(`   └─ Deep Crawling Subpage: ${base}${sub}`);
-            email = await this.fetchAndExtractEmail(`${base}${sub}`);
-            if (email) return email;
+            const subExtracted = await this.fetchAndExtract(`${base}${sub}`);
+            if (subExtracted.email) {
+                // Combine text context from both pages if possible
+                return { email: subExtracted.email, text: extracted.text + "\n" + subExtracted.text };
+            }
         }
-        return null;
+
+        return extracted;
     }
 
-    private async fetchAndExtractEmail(url: string): Promise<string | null> {
+    private async fetchAndExtract(url: string): Promise<{ email: string | null, text: string }> {
         try {
             const ua = this.USER_AGENTS[Math.floor(Math.random() * this.USER_AGENTS.length)];
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 6000); // 6s timeout per page
+            const timeout = setTimeout(() => controller.abort(), 8000);
 
             const response = await axios.get(url, {
                 headers: { 'User-Agent': ua },
@@ -220,7 +139,13 @@ export class WebScraper {
             clearTimeout(timeout);
 
             const html = response.data;
-            if (typeof html !== 'string') return null;
+            if (typeof html !== 'string') return { email: null, text: '' };
+
+            const $ = cheerio.load(html);
+
+            // Clean up noise for text extraction
+            $('script, style, noscript, iframe, img, svg, video').remove();
+            const textContent = $('body').text().replace(/\s+/g, ' ').trim().substring(0, 3000); // 3000 chars is enough for LLM context
 
             const emailRegex = /([a-zA-Z0-9._-]{2,}@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,})/gi;
             const matches = html.match(emailRegex);
@@ -242,12 +167,12 @@ export class WebScraper {
                 if (validEmails.length > 0) {
                     const priority = validEmails.find(e =>
                         e.startsWith('info') || e.startsWith('contact') || e.startsWith('hello') || e.startsWith('sales'));
-                    return priority || validEmails[0];
+                    return { email: priority || validEmails[0], text: textContent };
                 }
             }
-            return null;
+            return { email: null, text: textContent };
         } catch (error) {
-            return null;
+            return { email: null, text: '' };
         }
     }
 }

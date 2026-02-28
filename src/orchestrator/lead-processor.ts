@@ -129,42 +129,48 @@ export class LeadProcessor {
 
         const subject = threadInfo ? `Re: ${threadInfo.subject}` : `Re: Inquiry about ${config.businessName}`;
 
-        const result = await emailService.sendEmail(
-            lead.user_id,
-            lead,
-            subject,
-            decision.message_draft,
-            threadInfo,
-            attachments
+        const msgId = require('uuid').v4();
+
+        // Save local message draft
+        await db.query(
+            `INSERT INTO messages (id, workspace_id, lead_id, direction, message_id, in_reply_to, subject, body, gmail_thread_id, sent_at, attachments)
+             VALUES ($1, $2, $3, 'outbound', $4, $5, $6, $7, $8, datetime('now'), $9)`,
+            [
+                msgId,
+                lead.workspace_id,
+                lead.id,
+                require('uuid').v4(), // Placeholder until provider ID
+                threadInfo ? threadInfo.message_id : null,
+                subject,
+                decision.message_draft,
+                threadInfo ? threadInfo.gmail_thread_id : null,
+                attachments ? JSON.stringify(attachments) : null
+            ]
         );
 
-        if (result.sent) {
-            console.log(`✅ Response sent to ${lead.email}`);
+        // Enqueue job
+        await db.query(
+            `INSERT INTO send_jobs (id, workspace_id, email_message_id, status, scheduled_at, attempt_count, created_at, updated_at)
+             VALUES ($1, $2, $3, 'queued', datetime('now'), 0, datetime('now'), datetime('now'))`,
+            [require('uuid').v4(), lead.workspace_id, msgId]
+        );
 
-            // Log action
-            await db.query(
-                `INSERT INTO action_log (id, lead_id, action_type, details, created_at)
-                 VALUES ($1, $2, $3, $4, datetime('now'))`,
-                [
-                    require('uuid').v4(), // Need to make sure uuid is imported or use subquery if possible, but keeping simple
-                    lead.id,
-                    `email_sent_${decision.action}`,
-                    JSON.stringify({ messageId: result.messageId, subject })
-                ]
-            );
+        console.log(`✅ Reply to ${lead.email} queued via durable worker`);
 
-            // Update follow-up count logic if needed
-            // If it was a nurture/clarification, increment count? 
-            // Actually lead-processor's checkOptOut logic handles resetting on inbound.
-            // Scheduler handles incrementing.
-            // If we reply, we generally reset next_action_at to wait for their reply?
-            // For now, let's just mark it as updated.
-            await db.query(`UPDATE leads SET updated_at = datetime('now') WHERE id = $1`, [lead.id]);
+        // Log action
+        await db.query(
+            `INSERT INTO action_log (id, workspace_id, lead_id, action_type, details, created_at)
+             VALUES ($1, $2, $3, $4, $5, datetime('now'))`,
+            [
+                require('uuid').v4(),
+                lead.workspace_id,
+                lead.id,
+                `email_queued_${decision.action}`,
+                JSON.stringify({ subject })
+            ]
+        );
 
-        } else {
-            console.error(`❌ Failed to send response: ${result.reason}`);
-            await escalationHandler.escalate(lead, `Failed to send email: ${result.reason}`);
-        }
+        await db.query(`UPDATE leads SET updated_at = datetime('now') WHERE id = $1`, [lead.id]);
     }
 
     /**
@@ -208,7 +214,7 @@ export class LeadProcessor {
     private rowToLead(row: any): Lead {
         return {
             id: row.id,
-            user_id: row.user_id,
+            workspace_id: row.workspace_id,
             email: row.email,
             name: row.name,
             phone: row.phone,

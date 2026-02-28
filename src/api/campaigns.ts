@@ -9,7 +9,7 @@ const router = Router();
  */
 router.post('/start', async (req: any, res: Response) => {
     try {
-        const userId = req.user?.id;
+        const workspaceId = (req as any).workspaceId;
         const { niche, dailyLimit } = req.body;
 
         if (!niche) {
@@ -18,12 +18,12 @@ router.post('/start', async (req: any, res: Response) => {
 
         const limit = parseInt(dailyLimit) || 50;
 
-        await campaignRunner.start(userId, niche, limit);
+        await campaignRunner.start(workspaceId, niche, limit);
 
         res.json({
             success: true,
             message: `Campaign started for "${niche}"`,
-            stats: await campaignRunner.getStats(userId)
+            stats: await campaignRunner.getStats(workspaceId)
         });
     } catch (error) {
         console.error('Failed to start campaign:', error);
@@ -36,12 +36,12 @@ router.post('/start', async (req: any, res: Response) => {
  * Stop the current campaign
  */
 router.post('/stop', async (req: any, res: Response) => {
-    const userId = req.user?.id;
-    await campaignRunner.stop(userId);
+    const workspaceId = (req as any).workspaceId;
+    await campaignRunner.stop(workspaceId);
     res.json({
         success: true,
         message: 'Campaign stopped',
-        stats: await campaignRunner.getStats(userId)
+        stats: await campaignRunner.getStats(workspaceId)
     });
 });
 
@@ -50,8 +50,8 @@ router.post('/stop', async (req: any, res: Response) => {
  * Get current campaign statistics
  */
 router.get('/stats', async (req: any, res: Response) => {
-    const userId = req.user?.id;
-    res.json(await campaignRunner.getStats(userId));
+    const workspaceId = (req as any).workspaceId;
+    res.json(await campaignRunner.getStats(workspaceId));
 });
 
 export default router;

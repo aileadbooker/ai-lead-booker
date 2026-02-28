@@ -1,15 +1,16 @@
 import { v4 as uuidv4 } from 'uuid';
 import db from '../config/database';
 import { Lead } from '../types';
+import llmService from '../intelligence/llm-service';
 
 /**
  * Robust Lead Generator Orchestrator
- * Maps search niches to real Google pagination states and aggressively fetches until quotas are hit.
+ * Maps search niches to real DuckDuckGo pagination states, extracts text, and strictly verifies via AI.
  */
 export class LeadGenerator {
 
-    // In-memory state tracking to ensure we never scrape the same Google page twice for a niche
-    private nichePages: Map<string, number> = new Map();
+    // In-memory state tracking to ensure we never scrape the same offset twice for a niche
+    private nicheOffsets: Map<string, number> = new Map();
 
     /**
      * Generate leads based on a niche
@@ -17,13 +18,13 @@ export class LeadGenerator {
      * @param count Number of valid, non-duplicate leads to generate
      */
     async generateLeads(niche: string, count: number = 5): Promise<Lead[]> {
-        console.log(`🔍 REF: Real-time scraping for ${count} leads in niche: ${niche}...`);
+        console.log(`🔍 REF: Real-time scraping for ${count} leads in niche: "${niche}"...`);
 
         const newLeads: Lead[] = [];
-        let currentPage = this.nichePages.get(niche) || 1;
+        let currentOffset = this.nicheOffsets.get(niche) || 0;
 
         let scrapeAttempts = 0;
-        const MAX_ATTEMPTS = 5; // Guardrail: stop if the internet is completely drained of this niche
+        const MAX_ATTEMPTS = 4; // Guardrail
 
         while (newLeads.length < count && scrapeAttempts < MAX_ATTEMPTS) {
             scrapeAttempts++;
@@ -31,51 +32,56 @@ export class LeadGenerator {
 
             try {
                 const scraper = (await import('./scraper')).default;
-                console.log(`🕷️  Scraper ACTIVATED for: ${niche} (Google Page ${currentPage})`);
+                console.log(`🕷️  Scraper ACTIVATED for: ${niche} (Offset ${currentOffset})`);
 
-                // We ask the scraper to look at more domains to guarantee we find enough emails
-                const fetchAmount = Math.max(20, count * 2);
-                scrapedData = await scraper.findLeads(niche, fetchAmount, currentPage);
+                const fetchAmount = Math.max(15, count * 2);
+                scrapedData = await scraper.findLeads(niche, fetchAmount, currentOffset);
             } catch (err) {
                 console.error('❌ Critical: Scraping failed:', err);
                 break;
             }
 
             if (scrapedData.length === 0) {
-                console.log(`⚠️ Scraper returned 0 leads on page ${currentPage}. Exploring deeper pages...`);
-                currentPage++;
-                this.nichePages.set(niche, currentPage);
+                console.log(`⚠️ Scraper returned 0 leads at offset ${currentOffset}. Exploring deeper...`);
+                currentOffset += 15;
+                this.nicheOffsets.set(niche, currentOffset);
                 continue;
             }
 
-            console.log(`✅ Scraper successfully pulled ${scrapedData.length} valid emails on page ${currentPage}. Filtering against DB...`);
+            console.log(`✅ Scraper successfully pulled ${scrapedData.length} raw emails at offset ${currentOffset}. Proceeding to AI verification...`);
 
-            // Loop and save to database
+            // Loop, verify via LLM, and save
             for (const data of scrapedData) {
                 if (newLeads.length >= count) break;
 
                 const email = data.email;
                 if (!email) continue;
 
-                // 1. Check for Duplicate Emails
+                // 1. Check for Duplicate Emails globally across all workspaces
                 const existingEmail = await db.query('SELECT id FROM leads WHERE email = $1', [email]);
                 if (existingEmail.rows.length > 0) {
-                    console.log(`   - Skipping duplicate email: ${email}`);
+                    console.log(`   - Skipping known email: ${email}`);
                     continue;
                 }
 
-                // 2. Insert as a fresh Lead
-                const leadId = uuidv4();
+                // 2. AI Verification
+                console.log(`   🧠 Verifying contextual relevancy for ${email}...`);
+                const verification = await llmService.verifyScrapedLead(niche, email, data.textContent || '');
 
-                await db.query(
-                    `INSERT INTO leads (id, email, name, company, source, status, created_at, updated_at)
-                     VALUES ($1, $2, $3, $4, 'web_scrape', 'new', datetime('now'), datetime('now'))`,
-                    [leadId, email, data.company, data.company]
-                );
+                if (!verification.valid || verification.confidence < 60) {
+                    console.log(`   ❌ Rejected: ${email} -> ${verification.reasoning} (Confidence: ${verification.confidence}%)`);
+                    continue; // Skip irrelevant lead
+                }
+
+                console.log(`   🌟 Approved: ${email} -> ${verification.reasoning} (Confidence: ${verification.confidence}%)`);
+
+                // 3. Insert as a fresh, unallocated Lead.
+                // NOTE: campaign-runner.ts actually does a duplicate INSERT OR IGNORE and updates user_id itself, but we return the objects cleanly here.
+                const leadId = uuidv4();
 
                 newLeads.push({
                     id: leadId,
-                    user_id: '',
+                    workspace_id: '', // To be bound by the Campaign Runner
                     email,
                     name: data.company,
                     company: data.company,
@@ -88,12 +94,11 @@ export class LeadGenerator {
                 });
             }
 
-            // Always increment search page state so the AI acts like a human clicking "Next Page"
-            currentPage++;
-            this.nichePages.set(niche, currentPage);
+            currentOffset += 15;
+            this.nicheOffsets.set(niche, currentOffset);
         }
 
-        console.log(`✨ Successfully generated and queued ${newLeads.length} highly-targeted NEW leads.`);
+        console.log(`✨ Successfully verified and yielded ${newLeads.length} highly-targeted NEW leads.`);
         return newLeads;
     }
 }

@@ -7,10 +7,10 @@ const router = express.Router();
 // GET /api/leads
 router.get('/', async (req: any, res) => {
     try {
-        const userId = req.user?.id;
+        const workspaceId = (req as any).workspaceId;
         const { search, status, sort } = req.query;
-        let query = `SELECT * FROM leads WHERE user_id = $1`;
-        const params: any[] = [userId];
+        let query = `SELECT * FROM leads WHERE workspace_id = $1`;
+        const params: any[] = [workspaceId];
         const conditions: string[] = [];
 
         // Search Filter
@@ -49,21 +49,21 @@ router.get('/', async (req: any, res) => {
 // POST /api/leads (Manual Create)
 router.post('/', async (req: any, res) => {
     try {
-        const userId = req.user?.id;
+        const workspaceId = (req as any).workspaceId;
         const { name, email, company } = req.body;
         // Basic validation
         if (!email) return res.status(400).json({ error: 'Email is required' });
 
-        // Check if exists for this user
-        const existing = await db.query('SELECT id FROM leads WHERE email = $1 AND user_id = $2', [email, userId]);
+        // Check if exists for this workspace
+        const existing = await db.query('SELECT id FROM leads WHERE email = $1 AND workspace_id = $2', [email, workspaceId]);
         if (existing.rows.length > 0) return res.status(400).json({ error: 'Lead already exists' });
 
         const id = require('crypto').randomUUID();
 
         await db.query(
-            `INSERT INTO leads (id, user_id, email, name, company, source, status, created_at, updated_at, opted_out, followup_count)
+            `INSERT INTO leads (id, workspace_id, email, name, company, source, status, created_at, updated_at, opted_out, followup_count)
              VALUES ($1, $2, $3, $4, $5, 'manual', 'new', datetime('now'), datetime('now'), 0, 0)`,
-            [id, userId, email, name, company]
+            [id, workspaceId, email, name, company]
         );
 
         res.json({ success: true, id });
@@ -76,9 +76,9 @@ router.post('/', async (req: any, res) => {
 // GET /api/leads/:id
 router.get('/:id', async (req: any, res) => {
     try {
-        const userId = req.user?.id;
+        const workspaceId = (req as any).workspaceId;
         const { id } = req.params;
-        const leadRes = await db.query('SELECT * FROM leads WHERE id = $1 AND user_id = $2', [id, userId]);
+        const leadRes = await db.query('SELECT * FROM leads WHERE id = $1 AND workspace_id = $2', [id, workspaceId]);
 
         if (leadRes.rows.length === 0) return res.status(404).json({ error: 'Lead not found' });
 
@@ -97,9 +97,9 @@ router.get('/:id', async (req: any, res) => {
 // POST /api/leads/:id/opt-out
 router.post('/:id/opt-out', async (req: any, res) => {
     try {
-        const userId = req.user?.id;
+        const workspaceId = (req as any).workspaceId;
         const { id } = req.params;
-        await db.query('UPDATE leads SET status = $1 WHERE id = $2 AND user_id = $3', ['disqualified', id, userId]);
+        await db.query('UPDATE leads SET status = $1 WHERE id = $2 AND workspace_id = $3', ['disqualified', id, workspaceId]);
         res.json({ success: true, message: 'Lead opted out' });
     } catch (error) {
         res.status(500).json({ error: 'Failed to opt out' });
@@ -109,11 +109,11 @@ router.post('/:id/opt-out', async (req: any, res) => {
 // POST /api/leads/:id/refresh
 router.post('/:id/refresh', async (req: any, res) => {
     try {
-        const userId = req.user?.id;
+        const workspaceId = (req as any).workspaceId;
         const { id } = req.params;
         // Mock refresh delay
         await new Promise(resolve => setTimeout(resolve, 1000));
-        await db.query('UPDATE leads SET updated_at = datetime("now") WHERE id = $1 AND user_id = $2', [id, userId]);
+        await db.query('UPDATE leads SET updated_at = datetime("now") WHERE id = $1 AND workspace_id = $2', [id, workspaceId]);
         res.json({ success: true, message: 'Lead logic refreshed' });
     } catch (error) {
         res.status(500).json({ error: 'Failed to refresh logic' });
@@ -123,10 +123,10 @@ router.post('/:id/refresh', async (req: any, res) => {
 // POST /api/leads/:id/reply (Force AI Reply)
 router.post('/:id/reply', async (req: any, res) => {
     try {
-        const userId = req.user?.id;
+        const workspaceId = (req as any).workspaceId;
         const { id } = req.params;
         // Check if lead exists first
-        const leadRes = await db.query('SELECT * FROM leads WHERE id = $1 AND user_id = $2', [id, userId]);
+        const leadRes = await db.query('SELECT * FROM leads WHERE id = $1 AND workspace_id = $2', [id, workspaceId]);
         if (leadRes.rows.length === 0) return res.status(404).json({ error: 'Lead not found' });
 
         const leadRow = leadRes.rows[0];
@@ -134,7 +134,7 @@ router.post('/:id/reply', async (req: any, res) => {
         // Define Lead object locally mapping to DB schema
         const lead = {
             id: leadRow.id,
-            user_id: leadRow.user_id,
+            workspace_id: leadRow.workspace_id,
             email: leadRow.email,
             name: leadRow.name,
             phone: leadRow.phone,
@@ -164,11 +164,11 @@ router.post('/:id/reply', async (req: any, res) => {
 // DELETE /api/leads/:id
 router.delete('/:id', async (req: any, res) => {
     try {
-        const userId = req.user?.id;
+        const workspaceId = (req as any).workspaceId;
         const { id } = req.params;
 
         // Ensure ownership
-        const lead = await db.query('SELECT id FROM leads WHERE id = $1 AND user_id = $2', [id, userId]);
+        const lead = await db.query('SELECT id FROM leads WHERE id = $1 AND workspace_id = $2', [id, workspaceId]);
         if (lead.rows.length === 0) return res.status(404).json({ error: 'Lead not found' });
 
         await db.query('DELETE FROM leads WHERE id = $1', [id]);

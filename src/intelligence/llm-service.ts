@@ -287,6 +287,45 @@ Output strictly valid JSON array. No markdown, no explanations.`;
             return [];
         }
     }
+
+    /**
+     * Verify a scraped lead using website text content
+     */
+    async verifyScrapedLead(niche: string, email: string, textContent: string): Promise<{ valid: boolean, confidence: number, reasoning: string }> {
+        if (!this.openai || !config.openaiApiKey || config.openaiApiKey === 'sk-mock-key') {
+            return { valid: true, confidence: 80, reasoning: 'Mock pass due to missing API key' };
+        }
+
+        try {
+            const systemPrompt = `You are a strict B2B lead verification agent.
+Your job is to determine if the scraped text content from a website represents a real business matching the target niche: "${niche}".
+Furthermore, determine if the email "${email}" looks like a legitimate business contact email for this company.
+
+Output strictly JSON with:
+- "valid": boolean (Is it a real business in the niche? Is the email plausible?)
+- "confidence": 0-100 number
+- "reasoning": 1 sentence explanation.`;
+
+            const completion = await this.openai.chat.completions.create({
+                model: 'gpt-4o-mini',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: `Email: ${email}\n\nWebsite Text Fragment:\n${textContent.substring(0, 3000)}` }
+                ],
+                response_format: { type: 'json_object' }
+            });
+
+            const parsed = JSON.parse(completion.choices[0].message.content || '{}');
+            return {
+                valid: parsed.valid ?? true,
+                confidence: parsed.confidence ?? 80,
+                reasoning: parsed.reasoning ?? 'Verified via AI.'
+            };
+        } catch (error) {
+            console.error('AI Verification failed:', error);
+            return { valid: true, confidence: 50, reasoning: 'Fallback pass due to API error' };
+        }
+    }
 }
 
 export default new LLMService();

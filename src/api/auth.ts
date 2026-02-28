@@ -87,12 +87,19 @@ router.get('/dev-login', async (req: any, res: Response, next) => {
 
         if (!user) {
             const devId = `dev_${Date.now()}`;
+            const wsId = `ws_dev_${Date.now()}`;
             const devEmail = 'dev.tester@example.com';
+
+            await db.query(`INSERT INTO workspaces (id, name, created_at) VALUES ($1, $2, datetime('now'))`, [wsId, `Dev Workspace`]);
+
             await db.query(
-                `INSERT INTO users (id, email, name, has_paid, onboarding_completed, created_at, updated_at) 
-                 VALUES ($1, $2, 'Developer Tester', 1, 1, datetime('now'), datetime('now'))`,
-                [devId, devEmail]
+                `INSERT INTO users (id, default_workspace_id, email, name, has_paid, onboarding_completed, created_at, updated_at) 
+                 VALUES ($1, $2, $3, 'Developer Tester', 1, 1, datetime('now'), datetime('now'))`,
+                [devId, wsId, devEmail]
             );
+
+            await db.query(`INSERT INTO workspace_users (workspace_id, user_id, role, created_at) VALUES ($1, $2, 'admin', datetime('now'))`, [wsId, devId]);
+
             const refetch = await db.query('SELECT * FROM users WHERE id = $1', [devId]);
             user = refetch.rows[0];
         }

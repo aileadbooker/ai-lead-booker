@@ -1,35 +1,32 @@
-import nodemailer from 'nodemailer';
-import imaps from 'imap-simple';
-import { simpleParser, AddressObject } from 'mailparser';
+import { google } from 'googleapis';
+import { simpleParser } from 'mailparser';
 import * as ics from 'ics';
 import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config';
 import { Lead, EmailThreadInfo } from '../types';
 import db from '../config/database';
 import { analyticsTracker } from '../analytics/tracker';
+import MailComposer from 'nodemailer/lib/mail-composer';
 
 /**
- * Standard Email Service (SMTP/IMAP)
- * Replaces GmailService for production use without Google Cloud
+ * Gmail REST API Service
+ * Uses official googleapis package over port 443 to bypass strict SMTP blocking.
  */
 export class EmailService {
-    private transporter!: nodemailer.Transporter;
 
-    constructor() {
-        if (!config.enableRealEmail) {
-            console.log('Real email disabled. EmailService will not send/receive.');
-            return;
-        }
+    private getOAuthClient(email: string, accessToken: string, refreshToken: string) {
+        const oAuth2Client = new google.auth.OAuth2(
+            config.googleClientId,
+            config.googleClientSecret,
+            config.googleCallbackUrl
+        );
 
-        this.transporter = nodemailer.createTransport({
-            host: config.smtp.host,
-            port: config.smtp.port,
-            secure: config.smtp.port === 465, // true for 465, false for other ports
-            auth: {
-                user: config.smtp.user,
-                pass: config.smtp.pass,
-            },
+        oAuth2Client.setCredentials({
+            access_token: accessToken,
+            refresh_token: refreshToken
         });
+
+        return oAuth2Client;
     }
 
     /**
@@ -41,90 +38,87 @@ export class EmailService {
         let allNewLeads: Lead[] = [];
 
         try {
-            // Get all strictly initialized users
-            const users = await db.query(
-                `SELECT id, email, google_app_password FROM users WHERE google_app_password IS NOT NULL`
+            // Get all connected OAuth accounts
+            const accounts = await db.query(
+                `SELECT workspace_id, email, access_token, refresh_token_encrypted as refresh_token FROM oauth_accounts WHERE provider = 'google' AND refresh_token_encrypted IS NOT NULL`
             );
 
-            for (const user of users.rows) {
+            for (const account of accounts.rows) {
                 try {
-                    const leads = await this.pollUserInbox(user.id, user.email, user.google_app_password);
+                    const leads = await this.pollWorkspaceInbox(account.workspace_id, account.email, account.access_token, account.refresh_token);
                     allNewLeads.push(...leads);
                 } catch (err) {
-                    console.error(`Error polling inbox for user ${user.id}:`, err);
+                    console.error(`Error polling inbox for workspace ${account.workspace_id}:`, err);
                 }
             }
 
             return allNewLeads;
         } catch (error) {
-            console.error('Error in multi-tenant general inbox poller:', error);
+            console.error('Error in multi-tenant Google REST inbox poller:', error);
             return [];
         }
     }
 
     /**
-     * Poll a specific user's IMAP inbox
+     * Poll a specific workspace's inbox using Gmail API
      */
-    private async pollUserInbox(userId: string, imapUser: string, imapPass: string): Promise<Lead[]> {
-        let connection: imaps.ImapSimple | null = null;
-
+    private async pollWorkspaceInbox(workspaceId: string, email: string, accessToken: string, refreshToken: string): Promise<Lead[]> {
         try {
+            const auth = this.getOAuthClient(email, accessToken, refreshToken);
+            const gmail = google.gmail({ version: 'v1', auth });
 
-            const imapConfig = {
-                imap: {
-                    user: imapUser,
-                    password: imapPass,
-                    host: config.imap.host,
-                    port: config.imap.port,
-                    tls: true,
-                    tlsOptions: { rejectUnauthorized: false },
-                    authTimeout: 10000,
-                },
-            };
-
-            console.log('Connecting to IMAP...');
-            connection = await imaps.connect(imapConfig);
-            await connection.openBox('INBOX');
-
-            // CRITICAL: Only fetch emails from leads WE contacted (those with outbound messages) for THIS user
+            // CRITICAL: Only filter leads we contacted for this workspace
             const outboundLeads = await db.query(`
                 SELECT DISTINCT l.email 
                 FROM leads l
                 JOIN messages m ON l.id = m.lead_id
-                WHERE m.direction = 'outbound' AND l.user_id = $1
-            `, [userId]);
-
-            console.log(`Checking UNSEEN emails from ${outboundLeads.rows.length} leads we contacted...`);
+                WHERE m.direction = 'outbound' AND l.workspace_id = $1
+            `, [workspaceId]);
 
             const newLeads: Lead[] = [];
 
-            // For each lead we contacted, check for UNSEEN replies
+            if (outboundLeads.rows.length === 0) return [];
+
+            console.log(`Checking UNREAD Gmail threads for ${outboundLeads.rows.length} leads in workspace ${workspaceId}...`);
+
+            // To avoid making 100 queries, we can construct a unified query or iterate
             for (const row of outboundLeads.rows) {
                 const leadEmail = row.email as string;
 
                 try {
-                    const searchCriteria = ['UNSEEN', ['FROM', leadEmail]];
-                    const fetchOptions = {
-                        bodies: ['HEADER', 'TEXT', ''],
-                        markSeen: false,
-                    };
+                    const res = await gmail.users.messages.list({
+                        userId: 'me',
+                        q: `is:unread from:${leadEmail}`
+                    });
 
-                    const messages = await connection.search(searchCriteria, fetchOptions);
+                    if (res.data.messages && res.data.messages.length > 0) {
+                        for (const msg of res.data.messages) {
+                            if (!msg.id) continue;
 
-                    if (messages.length > 0) {
-                        console.log(`Found ${messages.length} unread message(s) from ${leadEmail}`);
-                    }
+                            // Fetch RAW format to use simpleParser
+                            const rawRes = await gmail.users.messages.get({
+                                userId: 'me',
+                                id: msg.id,
+                                format: 'raw'
+                            });
 
-                    for (const message of messages) {
-                        try {
-                            const lead = await this.processMessage(userId, message);
+                            if (!rawRes.data.raw) continue;
+
+                            const buffer = Buffer.from(rawRes.data.raw, 'base64url');
+                            const lead = await this.processMessage(workspaceId, msg.id, buffer);
+
                             if (lead) {
                                 newLeads.push(lead);
-                                // Mark as seen
-                                await connection.addFlags(message.attributes.uid, '\\Seen');
                             }
-                        } catch (error) {
-                            console.error(`Error processing email UID ${message.attributes.uid}:`, error);
+
+                            // Mark as read
+                            await gmail.users.messages.modify({
+                                userId: 'me',
+                                id: msg.id,
+                                requestBody: {
+                                    removeLabelIds: ['UNREAD']
+                                }
+                            });
                         }
                     }
                 } catch (error) {
@@ -132,32 +126,21 @@ export class EmailService {
                 }
             }
 
-            connection.end();
             return newLeads;
         } catch (error) {
-            console.error('Error polling IMAP inbox:', error);
-            if (connection) connection.end();
+            console.error('Error polling Gmail REST API:', error);
             return [];
         }
     }
 
     /**
-     * Process a single IMAP message
+     * Parse raw email and register inbound message map
      */
-    private async processMessage(userId: string, message: imaps.Message): Promise<Lead | null> {
-        const allParts = message.parts.find(part => part.which === '');
-        const idHeader = message.parts.find(part => part.which === 'HEADER');
-
-        if (!allParts || !allParts.body) {
-            console.warn('Skipping message with no body part');
-            return null;
-        }
-
-        const parsed = await simpleParser(allParts.body);
+    private async processMessage(workspaceId: string, providerMsgId: string, rawBuffer: Buffer): Promise<Lead | null> {
+        const parsed = await simpleParser(rawBuffer);
 
         const from = parsed.from?.value[0];
         if (!from || !from.address) {
-            console.warn('Skipping message with no From address');
             return null;
         }
 
@@ -172,35 +155,33 @@ export class EmailService {
         ];
 
         if (ignorePatterns.some(pattern => email.includes(pattern))) {
-            console.log(`Skipping ignored sender: ${email}`);
             return null;
         }
 
         const name = from.name || email.split('@')[0];
         const subject = parsed.subject || '(no subject)';
         const body = parsed.text || parsed.html || '(no body)'; // Prefer text
-        const messageId = parsed.messageId || uuidv4();
+        const messageId = parsed.messageId || providerMsgId;
         const inReplyTo = parsed.inReplyTo;
 
-        // Get or create lead scoped to this user
-        let lead = await this.getOrCreateLead(userId, email, name);
+        // Get or create lead scoped to this workspace
+        let lead = await this.getOrCreateLead(workspaceId, email, name);
 
-        // Update name if we have a better one now (and the old one was just the email prefix)
         if (from.name && lead.name === email.split('@')[0] && from.name !== lead.name) {
-            console.log(`Updating lead name from "${lead.name}" to "${from.name}"`);
             await db.query('UPDATE leads SET name = $1 WHERE id = $2', [from.name, lead.id]);
             lead.name = from.name;
         }
 
         // Store message
         await db.query(
-            `INSERT INTO messages (id, lead_id, direction, gmail_thread_id, message_id, in_reply_to, subject, body, sent_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, datetime('now'))`,
+            `INSERT INTO messages (id, workspace_id, lead_id, direction, gmail_thread_id, message_id, in_reply_to, subject, body, sent_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, datetime('now'))`,
             [
                 uuidv4(),
+                workspaceId,
                 lead.id,
                 'inbound',
-                null, // No Gmail thread ID in standard IMAP
+                null,
                 messageId,
                 inReplyTo,
                 subject,
@@ -211,26 +192,27 @@ export class EmailService {
         console.log(`Stored inbound message from ${email}`);
 
         // Track analytics event for reply received
-        await analyticsTracker.track('reply_received', userId, lead.id);
+        await analyticsTracker.track('reply_received', lead.workspace_id, lead.id);
 
         return lead;
     }
 
-    /**
-     * Get or create lead by email scoped to user
-     */
-    private async getOrCreateLead(userId: string, email: string, name?: string): Promise<Lead> {
-        const existing = await db.query('SELECT * FROM leads WHERE email = $1 AND user_id = $2', [email, userId]);
+    private async getOrCreateLead(workspaceId: string, email: string, name?: string): Promise<Lead> {
+        const existing = await db.query('SELECT * FROM leads WHERE email = $1 AND workspace_id = $2', [email, workspaceId]);
 
         if (existing.rows.length > 0) {
             return this.rowToLead(existing.rows[0]);
         }
 
         const leadId = uuidv4();
+        // Since user_id is NOT NULL in the legacy architecture, we fetch an arbitrary admin user for this workspace to link as owner, or use a system placeholder if strictly migrating
+        const wsUser = await db.query('SELECT user_id FROM workspace_users WHERE workspace_id = $1 LIMIT 1', [workspaceId]);
+        const fallbackUserId = wsUser.rows.length > 0 ? wsUser.rows[0].user_id : 'legacy_admin';
+
         await db.query(
-            `INSERT INTO leads (id, user_id, email, name, source, status, last_contact_at, created_at)
-             VALUES ($1, $2, $3, $4, 'email', 'new', datetime('now'), datetime('now'))`,
-            [leadId, userId, email, name || email.split('@')[0]]
+            `INSERT INTO leads (id, workspace_id, user_id, email, name, source, status, last_contact_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, 'email', 'new', datetime('now'), datetime('now'))`,
+            [leadId, workspaceId, fallbackUserId, email, name || email.split('@')[0]]
         );
 
         const newLead = await db.query('SELECT * FROM leads WHERE id = $1', [leadId]);
@@ -238,159 +220,71 @@ export class EmailService {
     }
 
     /**
-     * Get the appropriate transporter (OAuth or SMTP) for a specific user
-     */
-    private async getTransporter(userId: string): Promise<nodemailer.Transporter | null> {
-        // 1. Find user config
-        try {
-            const res = await db.query('SELECT email, access_token, refresh_token, google_id, google_app_password, google_account_email FROM users WHERE id = $1', [userId]);
-            if (res.rows.length > 0) {
-                const user = res.rows[0];
-
-                // Resolve IPv4 natively to bypass Alpine Linux DNS routing failures
-                const dns = require('dns');
-                const ipv4s = await dns.promises.resolve4('smtp.gmail.com');
-                const hostIp = ipv4s[0];
-
-                // A. Try App Password (Preferred for IMAP/SMTP simplicity)
-                // We use google_account_email if explicitly provided, otherwise fallback to their login email
-                if (user.google_app_password) {
-                    const senderEmail = user.google_account_email || user.email;
-                    console.log(`Using App Password for sender: ${senderEmail}`);
-
-                    return nodemailer.createTransport({
-                        host: hostIp,
-                        port: 587,
-                        secure: false, // Use STARTTLS
-                        requireTLS: true,
-                        family: 4,
-                        auth: {
-                            user: senderEmail,
-                            pass: user.google_app_password,
-                        },
-                        tls: { servername: 'smtp.gmail.com' },
-                    } as any);
-                }
-
-                // B. Try OAuth (Fallback)
-                if (user.access_token) {
-                    return nodemailer.createTransport({
-                        host: hostIp,
-                        port: 587,
-                        secure: false,
-                        requireTLS: true,
-                        family: 4,
-                        auth: {
-                            type: 'OAuth2',
-                            user: user.email,
-                            clientId: config.googleClientId,
-                            clientSecret: config.googleClientSecret,
-                            refreshToken: user.refresh_token,
-                            accessToken: user.access_token,
-                        },
-                        tls: { servername: 'smtp.gmail.com' },
-                    } as any);
-                }
-            }
-        } catch (error) {
-            console.warn('Failed to load Google user for transport:', error);
-        }
-
-        // 2. Fallback to SMTP from env
-        if (this.transporter) return this.transporter;
-
-        // 3. Fallback/Init SMTP if not already done
-        if (config.smtp.host) {
-            this.transporter = nodemailer.createTransport({
-                host: config.smtp.host,
-                port: config.smtp.port,
-                secure: config.smtp.port === 465,
-                auth: {
-                    user: config.smtp.user,
-                    pass: config.smtp.pass,
-                },
-            });
-            return this.transporter;
-        }
-
-        return null;
-    }
-
-    /**
-     * Send email via SMTP
+     * Compile MIME message and transmit over HTTPS (Port 443) using Gmail API
      */
     async sendEmail(
-        userId: string,
+        workspaceId: string,
         lead: Lead,
         subject: string,
         body: string,
-        threadInfo?: EmailThreadInfo,
-        attachments?: any[] // Support attachments (like ICS)
+        inReplyToId?: string | null,
+        attachments?: any[]
     ): Promise<{ sent: boolean; messageId?: string; reason?: string }> {
         if (!config.enableRealEmail) {
             console.log(`[MOCK EMAIL] To: ${lead.email}, Subject: ${subject}`);
-            await analyticsTracker.track('email_sent', userId, lead.id);
             return { sent: true, messageId: `mock-${uuidv4()}` };
         }
 
         try {
-            const transporter = await this.getTransporter(userId);
-            if (!transporter) {
-                console.error(`No email transport configured for user ${userId}`);
-                return { sent: false, reason: 'No email transport configured' };
+            const res = await db.query('SELECT email, access_token, refresh_token_encrypted as refresh_token FROM oauth_accounts WHERE workspace_id = $1 AND provider = $2 LIMIT 1', [workspaceId, 'google']);
+
+            if (res.rows.length === 0) {
+                return { sent: false, reason: 'No Google OAuth account configured for this workspace' };
             }
 
-            // Retrieve Sender config dynamically to ensure 'From:' matches the connected account
-            const res = await db.query('SELECT email, google_account_email FROM users WHERE id = $1', [userId]);
-            const user = res.rows[0] || {};
-            const senderEmail = user.google_account_email || user.email;
+            const { email, access_token, refresh_token } = res.rows[0];
+            const auth = this.getOAuthClient(email, access_token, refresh_token);
+            const gmail = google.gmail({ version: 'v1', auth });
 
-            const mailOptions: nodemailer.SendMailOptions = {
-                from: `"${config.businessName}" <${senderEmail}>`,
+            // Compose raw MIME email bytes
+            const mailOptions: any = {
+                from: `"${config.businessName}" <${email}>`,
                 to: lead.email,
                 subject: subject,
                 html: body,
-                text: body.replace(/<[^>]*>?/gm, ''), // Simple strip HTML for fallback
+                text: body.replace(/<[^>]*>?/gm, ''),
             };
 
-            // Add threading headers if replying
-            if (threadInfo && threadInfo.message_id) {
-                mailOptions.inReplyTo = threadInfo.message_id;
-                mailOptions.references = threadInfo.message_id;
+            if (inReplyToId) {
+                mailOptions.inReplyTo = inReplyToId;
+                mailOptions.references = inReplyToId;
             }
 
             if (attachments) {
                 mailOptions.attachments = attachments;
             }
 
-            const info = await transporter.sendMail(mailOptions);
-            const sentMessageId = info.messageId;
+            const composer = new MailComposer(mailOptions);
+            const rawMessageBuffer = await composer.compile().build();
+            const raw = rawMessageBuffer.toString('base64url'); // Requires Node >= 14.18
 
-            // Store sent message
-            await db.query(
-                `INSERT INTO messages (id, lead_id, direction, message_id, in_reply_to, subject, body, sent_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, datetime('now'))`,
-                [
-                    uuidv4(),
-                    lead.id,
-                    'outbound',
-                    sentMessageId,
-                    threadInfo?.message_id,
-                    subject,
-                    body,
-                ]
-            );
+            // Submit strictly via Port 443 REST payload
+            const result = await gmail.users.messages.send({
+                userId: 'me',
+                requestBody: { raw }
+            });
 
-            console.log(`Email sent to ${lead.email}, message ID: ${sentMessageId}`);
+            // True provider ID guaranteed delivered
+            const trueMessageId = result.data.id;
 
-            // Track analytics event
-            await analyticsTracker.track('email_sent', userId, lead.id);
+            await analyticsTracker.track('email_sent', lead.workspace_id, lead.id);
 
-            return { sent: true, messageId: sentMessageId };
+            return { sent: true, messageId: trueMessageId || undefined };
 
-        } catch (error) {
-            console.error('Error sending email:', error);
-            return { sent: false, reason: String(error) };
+        } catch (error: any) {
+            console.error('Error sending GMAIL REST Payload:', error);
+            // Some google failures have response body
+            return { sent: false, reason: error?.response?.data?.error?.message || String(error) };
         }
     }
 
@@ -459,7 +353,7 @@ export class EmailService {
     private rowToLead(row: any): Lead {
         return {
             id: row.id,
-            user_id: row.user_id,
+            workspace_id: row.workspace_id,
             email: row.email,
             name: row.name,
             phone: row.phone,
@@ -473,24 +367,6 @@ export class EmailService {
             created_at: row.created_at,
             updated_at: row.updated_at,
         };
-    }
-    async sendAdminReport(subject: string, html: string): Promise<void> {
-        if (!config.enableRealEmail) {
-            console.log(`[Shadow Mode] Admin Report "${subject}" would be sent.`);
-            return;
-        }
-
-        try {
-            await this.transporter.sendMail({
-                from: `"${config.businessName}" <${config.gmailUserEmail}>`,
-                to: config.gmailUserEmail, // Send to self
-                subject: `📊 ${subject}`,
-                html: html,
-            });
-            console.log(`Admin report sent: ${subject}`);
-        } catch (error) {
-            console.error('Failed to send admin report:', error);
-        }
     }
 }
 
