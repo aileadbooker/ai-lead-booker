@@ -597,68 +597,20 @@ async function loadEmailConfig() {
     try {
         const res = await fetch('/api/settings/email-config');
         const data = await res.json();
-        updateEmailConfigUI(data.configured);
+        updateEmailConfigUI(data.configured, data.email);
     } catch (error) {
         console.error('Failed to load email config:', error);
     }
 }
 
-async function saveEmailConfig() {
-    const btn = document.querySelector('button[onclick="saveEmailConfig()"]');
-    const originalText = btn.innerText;
+// saveEmailConfig is deprecated in favor of native Google OAuth
 
-    // Explicitly pair the App Password with the EXACT Google email
-    const email = document.getElementById('google-email').value;
-    const password = document.getElementById('app-password').value;
-
-    if (!email || !email.includes('@')) {
-        alert('Please enter your Google Account Email');
-        return;
-    }
-    if (!password) {
-        alert('Please enter your 16-letter App Password');
-        return;
-    }
-
-    try {
-        btn.innerText = 'Connecting...';
-        btn.disabled = true;
-
-        const res = await fetch('/api/settings/email-config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                googleEmail: email.trim(),
-                appPassword: password.replace(/\s+/g, '') // Strip spaces automatically
-            })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-            throw new Error(data.error || 'Failed to save');
-        }
-
-        document.getElementById('app-password').value = '';
-        updateEmailConfigUI(true, 'Connected');
-        showEmailNotification('✅ Email connected successfully!', 'success');
-
-    } catch (error) {
-        console.error(error);
-        updateEmailConfigUI(false, error.message);
-        showEmailNotification(`❌ ${error.message}`, 'error');
-    } finally {
-        btn.innerText = originalText;
-        btn.disabled = false;
-    }
-}
-
-function updateEmailConfigUI(isConfigured, message = 'Not Connected') {
+function updateEmailConfigUI(isConfigured, email = 'Not Connected') {
     const statusEl = document.getElementById('email-config-status');
     if (isConfigured) {
-        statusEl.innerHTML = `✅ Status: <span style="color: #4ade80">Connected</span>`;
+        statusEl.innerHTML = `✅ Sending Configuration Status: <span style="color: #4ade80">Securely Connected (${email})</span>`;
     } else {
-        statusEl.innerHTML = `⚠️ Status: <span style="color: #ef4444">${message}</span>`;
+        statusEl.innerHTML = `⚠️ Sending Configuration Status: <span style="color: #ef4444">Awaiting Connection</span>`;
     }
 }
 
