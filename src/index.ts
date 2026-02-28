@@ -117,7 +117,7 @@ async function main() {
     app.use(express.json());
 
     app.get('/health', (req, res) => {
-        res.json({ status: 'healthy', timestamp: new Date() });
+        res.json({ status: 'healthy', version: 'v3-oauth-canary', timestamp: new Date() });
     });
 
     // Explicit route for Google Site Verification
