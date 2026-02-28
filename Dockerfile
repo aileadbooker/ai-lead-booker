@@ -19,7 +19,7 @@ RUN npm run build
 RUN mkdir -p database
 
 # Create volume for persistent SQLite database
-VOLUME ["/app/database"]
+# VOLUME ["/app/database"]
 
 # Expose the application port
 EXPOSE 3000
