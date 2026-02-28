@@ -41,7 +41,8 @@ export class SummaryGenerator {
 
         // 4. Send Email
         const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-        await emailService.sendAdminReport(`Daily Summary - ${dateStr}`, html);
+        console.log(`[Admin] Daily Summary generated for ${dateStr}. Unified admin email reports are disabled in multi-tenant mode.`);
+        // await emailService.sendAdminReport(`Daily Summary - ${dateStr}`, html);
     }
 
     private buildHtml(stats: any, bookings: any[], date: Date): string {

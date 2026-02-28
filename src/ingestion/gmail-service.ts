@@ -274,7 +274,7 @@ export class GmailService {
     private rowToLead(row: any): Lead {
         return {
             id: row.id,
-            user_id: row.user_id,
+            workspace_id: row.workspace_id,
             email: row.email,
             name: row.name,
             phone: row.phone,
