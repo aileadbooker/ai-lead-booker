@@ -1,1 +1,0 @@
-{"version":3,"file":"lead-generator.d.ts","sourceRoot":"","sources":["../../src/ingestion/lead-generator.ts"],"names":[],"mappings":"AAEA,OAAO,EAAE,IAAI,EAAE,MAAM,UAAU,CAAC;AAEhC;;;GAGG;AACH,qBAAa,aAAa;IAGtB,OAAO,CAAC,UAAU,CAAkC;IAEpD;;;;OAIG;IACG,aAAa,CAAC,KAAK,EAAE,MAAM,EAAE,KAAK,GAAE,MAAU,GAAG,OAAO,CAAC,IAAI,EAAE,CAAC;CAgFzE;;AAED,wBAAmC"}
