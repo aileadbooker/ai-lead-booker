@@ -51,11 +51,22 @@ try {
         console.log("Adding legacy_admin shadow user fallback...");
         db.prepare(`INSERT OR IGNORE INTO users (id, email) VALUES ('legacy_admin', 'system@legacy.admin')`).run();
 
+        // 2.5 Rebuild campaign_config to drop old user_id constraints
+        try {
+            const campaignCols = db.prepare("PRAGMA table_info(campaign_config)").all();
+            if (campaignCols.some(c => c.name === 'user_id')) {
+                console.log("Legacy user_id detected in campaign_config. Rebuilding table for Multi-Tenant Workspace isolation...");
+                db.prepare(`DROP TABLE IF EXISTS campaign_config`).run();
+            }
+        } catch (e) {
+            console.log("campaign_config does not exist yet or rebuilding failed.");
+        }
+
         // 3. Scan all operational tables and inject workspace_id barriers
         const tablesToMigrate = [
             'leads', 'messages', 'conversations', 'llm_decisions', 'bookings',
             'escalations', 'analytics_events', 'knowledge_base', 'rate_limits',
-            'action_log', 'custom_pitch', 'campaign_config', 'business_config'
+            'action_log', 'custom_pitch', 'business_config'
         ];
 
         for (const table of tablesToMigrate) {
