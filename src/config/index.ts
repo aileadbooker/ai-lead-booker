@@ -71,18 +71,15 @@ export function validateConfig(): { valid: boolean; missing: string[] } {
 
     // Email Integration Requirements (skip if real email not enabled)
     if (config.enableRealEmail) {
-        if (!process.env.SMTP_HOST) missing.push('SMTP_HOST');
-        if (!process.env.SMTP_USER || process.env.SMTP_USER.includes('your-email')) missing.push('SMTP_USER');
-        if (!process.env.SMTP_PASS || process.env.SMTP_PASS.includes('your-app-password')) missing.push('SMTP_PASS');
-        if (!process.env.IMAP_HOST) missing.push('IMAP_HOST');
+        // We now use Google OAuth via REST API instead of legacy SMTP/IMAP credentials
+        if (!config.googleClientId) missing.push('GOOGLE_CLIENT_ID');
+        if (!config.googleClientSecret) missing.push('GOOGLE_CLIENT_SECRET');
     } else {
         // If not using real email, check for Google Credentials (legacy/simulator mode)
         // We warn but don't fail for Google creds if they are missing in Simulator mode
         const googleRequired = [
             'GOOGLE_CLIENT_ID',
             'GOOGLE_CLIENT_SECRET',
-            'GOOGLE_REFRESH_TOKEN',
-            'GOOGLE_REDIRECT_URI',
         ];
         const missingGoogle = googleRequired.filter((key) => !process.env[key]);
         if (missingGoogle.length > 0) {
