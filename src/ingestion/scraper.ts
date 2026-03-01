@@ -1,10 +1,9 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { search, SafeSearchType } from 'duck-duck-scrape';
 
 /**
  * Stage 1 & 2: Search & Extract
- * Uses DuckDuckScrape to bypass Google/Bing anti-bot protection and extracts emails + text.
+ * Uses Yahoo Search to bypass strict bot protection and extracts emails + text.
  */
 export class WebScraper {
     private readonly USER_AGENTS = [
@@ -17,28 +16,60 @@ export class WebScraper {
      * Search for leads using DuckDuckGo
      */
     async findLeads(niche: string, maxResults: number = 10, offset: number = 0): Promise<Array<{ company: string, url: string, email?: string, textContent: string, source: string }>> {
-        console.log(`🔎 Scraping DDG for: "${niche}" (Offset ${offset})...`);
+        console.log(`🔎 Scraping Yahoo for: "${niche}" (Offset ${offset})...`);
 
         let searchResults: Array<{ title: string, url: string }> = [];
 
         try {
-            // DuckDuckScrape does not use traditional "pages" but rather handles scrolling/fetching internally or we can limit it.
-            // But we can just use the natural query and take what we need. For deep pagination we modify the query slightly or rely on the engine.
-            const ddgResults = await search(niche, {
-                safeSearch: SafeSearchType.STRICT
+            const encodedQuery = encodeURIComponent(niche);
+            // Yahoo uses 'b' for offset (1-indexed based on result count, e.g. b=11 is page 2)
+            const b = offset > 0 ? `&b=${offset + 1}` : '';
+            const searchUrl = `https://search.yahoo.com/search?p=${encodedQuery}${b}`;
+
+            const ua = this.USER_AGENTS[Math.floor(Math.random() * this.USER_AGENTS.length)];
+            const res = await axios.get(searchUrl, {
+                headers: {
+                    'User-Agent': ua,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                },
+                timeout: 10000
             });
 
-            if (ddgResults.results) {
-                // Manually slice to simulate pagination offset
-                const sliced = ddgResults.results.slice(offset, offset + maxResults + 10);
-                for (const r of sliced) {
-                    if (r.url && r.url.startsWith('http') && !this.isBlacklisted(r.url)) {
-                        searchResults.push({ title: r.title, url: r.url });
+            const $ = cheerio.load(res.data);
+            const rawLinks: string[] = [];
+
+            $('a').each((i, el) => {
+                let href = $(el).attr('href');
+                if (href && href.startsWith('http') && !href.includes('yahoo.com')) {
+                    if (href.includes('RU=')) {
+                        try {
+                            const decoded = decodeURIComponent(href.split('RU=')[1].split('/')[0]);
+                            if (decoded.startsWith('http') && !decoded.includes('yahoo.com')) {
+                                rawLinks.push(decoded);
+                            }
+                        } catch (e) { }
+                    } else {
+                        rawLinks.push(href);
                     }
                 }
+            });
+
+            const uniqueDomains = new Set<string>();
+            for (const url of rawLinks) {
+                if (!this.isBlacklisted(url)) {
+                    try {
+                        const domain = new URL(url).hostname.replace('www.', '');
+                        if (!uniqueDomains.has(domain)) {
+                            uniqueDomains.add(domain);
+                            // Set title to domain as fallback since we extract it raw
+                            searchResults.push({ title: domain, url: url });
+                        }
+                    } catch (e) { }
+                }
             }
-        } catch (error) {
-            console.error('DuckDuckScrape failed:', error);
+        } catch (error: any) {
+            console.error('Yahoo scrape failed:', error.message);
         }
 
         const leads: Array<{ company: string, url: string, email?: string, textContent: string, source: string }> = [];

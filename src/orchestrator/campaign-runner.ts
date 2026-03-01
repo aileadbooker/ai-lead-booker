@@ -24,8 +24,8 @@ class CampaignRunner {
     async init() {
         console.log('🔄 Initializing Master Campaign Runner loop...');
         if (!this.intervalId) {
-            // Run processAllQueues every 60 seconds
-            this.intervalId = setInterval(() => this.processAllQueues(), 60000);
+            // Run processAllQueues every 15 seconds (aggressively fast)
+            this.intervalId = setInterval(() => this.processAllQueues(), 15000);
         }
     }
 
@@ -212,7 +212,7 @@ class CampaignRunner {
                 if (success) {
                     sentToday++;
                     // Slight delay to be nice to SMTP
-                    await new Promise(r => setTimeout(r, 2000));
+                    await new Promise(r => setTimeout(r, 500));
                 }
             }
 

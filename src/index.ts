@@ -285,7 +285,7 @@ async function main() {
 
     // Initialize campaign runner & queue worker
     await campaignRunner.init();
-    queueWorker.start(5000); // 5 second polling interval
+    queueWorker.start(1000); // 1 second polling interval (aggressively fast)
 
     // 5. Start follow-up scheduler
     followupScheduler.start(60000); // Check for follow-ups every 60 seconds
