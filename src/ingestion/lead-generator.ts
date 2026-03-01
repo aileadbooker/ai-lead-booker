@@ -36,9 +36,9 @@ export class LeadGenerator {
 
                 const fetchAmount = Math.max(15, count * 2);
                 scrapedData = await scraper.findLeads(niche, fetchAmount, currentOffset);
-            } catch (err) {
-                console.error('❌ Critical: Scraping failed:', err);
-                break;
+            } catch (err: any) {
+                console.log(`❌ Scraper failed (Likely IP Block): ${err.message}. Triggering Fallback System...`);
+                scrapedData = []; // Assign empty array to trigger the fallback block below instead of breaking the loop
             }
 
             if (scrapedData.length === 0) {
